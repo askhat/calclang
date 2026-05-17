@@ -28,14 +28,14 @@ describe("handleReplLine", () => {
   })
 
   test("unit declaration is silent (no annotation)", () => {
-    const r = handleReplLine("unit kg base mass", new Evaluator())
+    const r = handleReplLine("UNIT Mass kg", new Evaluator())
     expect(r.stdoutLines).toEqual([])
   })
 
   test("composite unit setup then expression", () => {
     const ev = new Evaluator()
-    handleReplLine("unit kg base mass", ev)
-    handleReplLine("unit gr (kg / 1_000)", ev)
+    handleReplLine("UNIT Mass kg", ev)
+    handleReplLine("UNIT Mass gr (kg / 1_000)", ev)
     const r = handleReplLine("2500 gr as kg", ev)
     expect(r.stdoutLines).toEqual(["= 2,5 kg"])
   })
@@ -70,13 +70,13 @@ describe("handleReplLine", () => {
 
   test(":units lists registered units (after some declares)", () => {
     const ev = new Evaluator()
-    handleReplLine("unit kg base mass", ev)
-    handleReplLine("unit gr (kg / 1_000)", ev)
+    handleReplLine("UNIT Mass kg", ev)
+    handleReplLine("UNIT Mass gr (kg / 1_000)", ev)
     const r = handleReplLine(":units", ev)
     const all = r.stdoutLines.join("\n")
     expect(all).toContain("kg")
     expect(all).toContain("gr")
-    expect(all).toContain("mass")
+    expect(all).toContain("Mass")
   })
 
   test(":units when empty notes there are none", () => {
@@ -111,8 +111,8 @@ describe("handleReplLine", () => {
 
   test("workflow: unit → bind → reference → conversion", () => {
     const ev = new Evaluator()
-    handleReplLine("unit usd base currency", ev)
-    handleReplLine("unit rub (usd / 90,5)", ev)
+    handleReplLine("UNIT Currency usd", ev)
+    handleReplLine("UNIT Currency rub (usd / 90,5)", ev)
     handleReplLine("35,5 rub salary", ev)
     const r = handleReplLine("salary as usd", ev)
     // 35.5 / 90.5 ≈ 0.392265

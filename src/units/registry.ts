@@ -6,34 +6,29 @@ import { makeNamedUnit, type Unit } from "./unit.ts"
 export class UnitRegistry {
   private readonly byName = new Map<string, Unit>()
 
-  /** unit X base DIM — fresh dimension with unit factor 1. */
-  registerBase(name: string, dimension: string): Unit {
-    return this.add(
-      makeNamedUnit(name, { [dimension]: 1 }, new Decimal(1)),
-    )
-  }
-
   /**
-   * unit X DIM — placeholder for dynamic-rate units (currencies that
-   * would consult an FX provider). In MVP this is identical to base; the
-   * interface is in place so a future stage can attach a rate source.
+   * UNIT <Dim> <name> — factor 1 in the named dimension. The first such
+   * declaration in a dimension creates the dimension and is the base;
+   * subsequent ones are placeholders (factor 1 in MVP; would consult an
+   * external rate source for currencies in a future stage).
    */
-  registerAlias(name: string, dimension: string): Unit {
+  registerSimple(name: string, dimension: string): Unit {
     return this.add(
       makeNamedUnit(name, { [dimension]: 1 }, new Decimal(1)),
     )
   }
 
   /**
-   * unit X (expr) — the expression was already evaluated by the caller
-   * to produce `value`. The factor of the new unit is `value.value *
-   * value.unit.factor` (i.e. how many base units one of X is worth).
+   * UNIT <Dim> <name> (expr) — the body evaluated to `value`. The unit's
+   * factor is `value.value * value.unit.factor` (how many base units one
+   * of `name` is worth). The caller is expected to have already verified
+   * that value.unit.dimension matches the declared dimension.
    */
   registerDerived(name: string, value: Quantity): Unit {
     if (!value.unit) {
       throw new UnitError(
         `cannot derive unit '${name}' from a dimensionless value`,
-        `the body of 'unit ${name} (...)' must reference at least one declared unit`,
+        `the body of 'UNIT <Dim> ${name} (...)' must reference at least one declared unit`,
       )
     }
     return this.add(

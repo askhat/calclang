@@ -6,16 +6,16 @@ real dimensional type system on top — `kg + rub` is a compile-time error, not
 a silent string concat.
 
 ```calc
-unit usd base currency
-unit rub (usd / 90,5)
-unit kg base mass
+UNIT Currency usd
+UNIT (usd / 90,5) rub
+UNIT Mass kg
 
 35,5 rub salary
 70 kg weight
 
 salary + 10 = total           // = 45,5 rub
 salary as usd                 // = 0,392265 usd
-weight * 9,8 (kg / s ^ 2) ... # too far for the README, see examples/physics.calc
+# see examples/physics.calc for kinematics with kg·m/s^2
 ```
 
 ## Running
@@ -39,12 +39,17 @@ four kinds of statement and one kind of directive-comment.
 
 **Comments.** `# anything to end of line.`
 
-**Unit declarations.** Three forms — base, composite, and alias.
+**Unit declarations.** `UNIT` is a case-sensitive uppercase keyword.
+Dimensions are Capitalized (Mass, Length, Currency, …); unit and variable
+names are lowercase. Two equivalent surface forms — pick the one that
+reads better in context:
 
 ```calc
-unit kg base mass                # base unit of a new dimension
-unit gr (kg / 1_000)             # composite — 1 gr = 0.001 kg
-unit kzt currency                # alias — placeholder for dynamic FX (MVP: factor 1)
+UNIT Mass kg                     # simple — factor 1 in dimension Mass
+UNIT Mass gr (kg / 1_000)        # composite with explicit dim — body must match
+UNIT (kg / 1_000) gr             # composite with inferred dim — body decides
+UNIT Currency usd                # first decl creates the Currency dimension
+UNIT Currency kzt                # second decl is a placeholder for dynamic FX
 ```
 
 **Variable declarations.** `[+|-]? NUMBER [unit_expr] IDENT`. The trailing
@@ -83,7 +88,7 @@ anonymous one-offs.
 - **Mixed dimensionless + dimensioned** is allowed: `salary + 10` adds 10 in
   the same unit as `salary`. `salary > 0` is true.
 - **Mismatched dimensions error.** `1 kg + 1 rub` →
-  `cannot add kg (mass) and rub (currency)`.
+  `cannot add kg (Mass) and rub (Currency)`.
 - **Composite unit names are canonical.** `m * m` shows as `m^2`,
   `kg * m / s^2` shows as `kg·m/s^2` regardless of construction order.
 

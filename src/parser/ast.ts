@@ -100,10 +100,20 @@ export type ConversionExpr = {
 
 // -- Statements --
 
-export type UnitDef =
-  | { kind: "base"; dimension: string }
-  | { kind: "composite"; expr: Expr }
-  | { kind: "alias"; dimension: string }
+/**
+ * A unit declaration. Two source-level forms produce the same AST shape:
+ *
+ *   UNIT <Dimension> <name>                    → { dimension }
+ *   UNIT <Dimension> <name> (expr)             → { dimension, expr }   (dim-checked)
+ *   UNIT (expr) <name>                         → { expr }              (dim inferred from body)
+ *
+ * `dimension` is undefined only in the inferred-dim form, in which case
+ * `expr` is guaranteed present. The parser enforces this invariant.
+ */
+export type UnitDef = {
+  dimension?: string
+  expr?: Expr
+}
 
 export type UnitDecl = {
   type: "unitDecl"
@@ -188,14 +198,10 @@ export function showStatement(s: Statement): string {
 }
 
 function showUnitDef(d: UnitDef): string {
-  switch (d.kind) {
-    case "base":
-      return `(base ${d.dimension})`
-    case "composite":
-      return `(composite ${showExpr(d.expr)})`
-    case "alias":
-      return `(alias ${d.dimension})`
-  }
+  if (d.dimension && d.expr) return `${d.dimension} ${showExpr(d.expr)}`
+  if (d.dimension) return d.dimension
+  if (d.expr) return `(${showExpr(d.expr)})`
+  return "<empty>"
 }
 
 export function showProgram(p: Program): string {

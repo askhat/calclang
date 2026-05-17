@@ -10,14 +10,14 @@ import { engineState, setSnapshot, snapshotState } from "./state.ts"
 
 const STARTER = `# Welcome to Calc! Edit anything and watch results update.
 
-unit usd base currency
-unit rub (usd / 90,5)
-unit kzt (usd / 467,245543)
+UNIT Currency USD
+UNIT (USD / 90,5) RUB
+UNIT (USD / 467,245543) KZT
 
-35,5 rub salary
+35,5 RUB salary
 salary + 10 = total
-salary as kzt = salaryInKzt
-100 rub + 5 usd
+salary as KZT = salary_in_KZT
+100 RUB + 5 USD
 
 # Try Alt+↑ / Alt+↓ on a number to nudge it.
 # Hover an identifier for its value.

@@ -6,9 +6,10 @@ import {
 } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
 
+// 'UNIT' is the unit-decl keyword (case-sensitive uppercase). The rest are
+// lowercase. Lowercase 'unit' is NOT a keyword — it's a plain identifier.
 const KEYWORDS = new Set([
-  "unit",
-  "base",
+  "UNIT",
   "as",
   "if",
   "then",
@@ -65,6 +66,11 @@ const calcStream = StreamLanguage.define<State>({
       // suffix in primary / variable_decl. Tag it differently so unit
       // mentions visually pop.
       if (prevWasNumber) return "typeName"
+      // Capitalized identifiers are dimension names (per the new grammar):
+      // `UNIT Currency usd`, `UNIT Mass kg`. Style them the same as unit
+      // suffixes so the "type-level" reading is visually consistent.
+      const first = word[0]
+      if (first && first >= "A" && first <= "Z") return "typeName"
       return "variableName"
     }
 

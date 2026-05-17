@@ -61,15 +61,32 @@ const KIND_NAMES: Partial<Record<TokenKind, string>> = {
   NUMBER: "number",
 }
 
-/** First pass: scan for `unit X ...` lines and collect the X names. */
+/**
+ * First pass: find the unit name in each UNIT line, regardless of form.
+ *   UNIT <Dim> <name> ...     → name is at position i+2
+ *   UNIT ( ... ) <name>       → name is the first IDENT after the closing ')'
+ */
 export function collectUnitNames(tokens: readonly Token[]): Set<string> {
   const names = new Set<string>()
-  for (let i = 0; i < tokens.length - 1; i++) {
-    if (
-      tokens[i]?.kind === "UNIT" &&
-      tokens[i + 1]?.kind === "IDENT"
-    ) {
-      names.add(tokens[i + 1]!.lexeme)
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i]?.kind !== "UNIT") continue
+    const next = tokens[i + 1]
+    if (next?.kind === "IDENT" && tokens[i + 2]?.kind === "IDENT") {
+      names.add(tokens[i + 2]!.lexeme)
+    } else if (next?.kind === "LPAREN") {
+      // Skip to matching ')'; the next IDENT after it is the unit name.
+      let depth = 1
+      let j = i + 2
+      while (j < tokens.length && depth > 0) {
+        const k = tokens[j]?.kind
+        if (k === "LPAREN") depth++
+        else if (k === "RPAREN") depth--
+        else if (k === "NEWLINE" || k === "EOF") break
+        j++
+      }
+      if (depth === 0 && tokens[j]?.kind === "IDENT") {
+        names.add(tokens[j]!.lexeme)
+      }
     }
   }
   return names
@@ -170,34 +187,49 @@ class Parser {
   }
 
   private parseDeclaration(): UnitDecl | null {
-    const unitKwTok = this.advance() // 'unit'
-    const nameTok = this.expect("IDENT")
-    if (!nameTok) return null
+    // Two forms — both end with the unit name:
+    //   UNIT <Dimension> <name> [ ( expr ) ]   — explicit dim, optional body
+    //   UNIT ( expr ) <name>                   — composite, dim inferred from body
+    const unitKwTok = this.advance() // 'UNIT'
 
-    const next = this.peek()
     let def: UnitDef
-    if (next.kind === "BASE") {
-      this.advance()
-      const dimTok = this.expect("IDENT")
-      if (!dimTok) return null
-      def = { kind: "base", dimension: dimTok.lexeme }
-    } else if (next.kind === "LPAREN") {
-      this.advance()
+    let nameTok: Token | null
+
+    if (this.peek().kind === "LPAREN") {
+      // Inferred-dim form: UNIT ( expr ) <name>
+      this.advance() // (
       this.skipNewlines()
       const expr = this.parseExpressionRule()
       if (!expr) return null
       this.skipNewlines()
       if (!this.expect("RPAREN")) return null
-      def = { kind: "composite", expr }
-    } else if (next.kind === "IDENT") {
-      this.advance()
-      def = { kind: "alias", dimension: next.lexeme }
+      nameTok = this.expect("IDENT")
+      if (!nameTok) return null
+      def = { expr }
     } else {
-      this.diagnose(
-        next,
-        `expected 'base', '(', or dimension name, got ${describe(next)}`,
-      )
-      return null
+      // Explicit-dim form.
+      const dimTok = this.expect("IDENT")
+      if (!dimTok) return null
+      if (!startsUppercase(dimTok.lexeme)) {
+        this.diagnose(
+          dimTok,
+          `expected a capitalized dimension name, got '${dimTok.lexeme}'`,
+          "dimensions are Capitalized (e.g. Mass, Length, Currency); unit and variable names are lowercase",
+        )
+      }
+      nameTok = this.expect("IDENT")
+      if (!nameTok) return null
+
+      def = { dimension: dimTok.lexeme }
+      if (this.peek().kind === "LPAREN") {
+        this.advance()
+        this.skipNewlines()
+        const expr = this.parseExpressionRule()
+        if (!expr) return null
+        this.skipNewlines()
+        if (!this.expect("RPAREN")) return null
+        def = { dimension: dimTok.lexeme, expr }
+      }
     }
 
     return {
@@ -234,7 +266,7 @@ class Parser {
         this.diagnose(
           unitTok,
           `unknown unit '${unitTok.lexeme}'`,
-          `add 'unit ${unitTok.lexeme} base <dim>' or 'unit ${unitTok.lexeme} (<expr>)'`,
+          `add 'UNIT <Dimension> ${unitTok.lexeme}' or 'UNIT <Dimension> ${unitTok.lexeme} (<expr>)'`,
         )
       }
       unit = {
@@ -423,7 +455,7 @@ class Parser {
             this.diagnose(
               next,
               `unknown unit '${next.lexeme}'`,
-              `add 'unit ${next.lexeme} base <dim>' or 'unit ${next.lexeme} (<expr>)'`,
+              `add 'UNIT <Dimension> ${next.lexeme}' or 'UNIT <Dimension> ${next.lexeme} (<expr>)'`,
             )
             unit = {
               type: "unitRef",
@@ -574,6 +606,11 @@ class Parser {
 
 function pos(t: Token): Position {
   return { line: t.line, col: t.col }
+}
+
+function startsUppercase(s: string): boolean {
+  const c = s[0]
+  return !!c && c >= "A" && c <= "Z"
 }
 
 function describe(t: Token): string {

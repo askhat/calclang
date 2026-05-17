@@ -11,6 +11,8 @@ import type {
   UnitExpr,
   VariableDecl,
 } from "../parser/ast.ts"
+import * as Dim from "../units/dimension.ts"
+import type { DimensionVector } from "../units/dimension.ts"
 import * as Q from "../units/quantity.ts"
 import type { Quantity } from "../units/quantity.ts"
 import { UnitRegistry } from "../units/registry.ts"
@@ -197,26 +199,40 @@ export class Evaluator {
     this.resolvingStack.push(name)
     try {
       let registered: Unit
-      switch (decl.def.kind) {
-        case "base":
-          registered = this.registry.registerBase(name, decl.def.dimension)
-          break
-        case "alias":
-          registered = this.registry.registerAlias(name, decl.def.dimension)
-          break
-        case "composite": {
-          const body = this.evalExpr(decl.def.expr)
-          const q = asQuantity(body, decl.def.expr.pos)
-          if (!q.unit) {
+      if (decl.def.expr) {
+        // Composite form. Evaluate the body and (if a dimension is also
+        // declared) verify the body's dimension matches.
+        const body = this.evalExpr(decl.def.expr)
+        const q = asQuantity(body, decl.def.expr.pos)
+        if (!q.unit) {
+          throw new EvalError(
+            `composite definition of '${name}' must yield a quantity, not a dimensionless number`,
+            decl.def.expr.pos,
+            `reference at least one already-declared unit in the body`,
+          )
+        }
+        if (decl.def.dimension) {
+          const expected: DimensionVector = { [decl.def.dimension]: 1 }
+          if (!Dim.equals(q.unit.dimension, expected)) {
             throw new EvalError(
-              `composite definition of '${name}' must yield a quantity, not a dimensionless number`,
+              `unit '${name}' was declared as ${decl.def.dimension} but its body evaluates to ${Dim.format(q.unit.dimension)}`,
               decl.def.expr.pos,
-              `reference at least one already-declared unit in the body`,
+              `the body's resulting dimension must match the declared dimension`,
             )
           }
-          registered = this.registry.registerDerived(name, q)
-          break
         }
+        registered = this.registry.registerDerived(name, q)
+      } else if (decl.def.dimension) {
+        // UNIT <Dim> <name> — factor 1 in <Dim>. First declaration in a
+        // dimension creates it; subsequent ones are placeholders for
+        // future dynamic rates.
+        registered = this.registry.registerSimple(name, decl.def.dimension)
+      } else {
+        // Should not happen — parser enforces presence of dim or expr.
+        throw new EvalError(
+          `unit '${name}' has neither a dimension nor a body`,
+          decl.pos,
+        )
       }
       this.pendingUnits.delete(name)
       return registered

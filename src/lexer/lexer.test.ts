@@ -106,8 +106,7 @@ describe("identifiers and keywords", () => {
 
   test("every keyword is recognized", () => {
     const cases: Array<[string, TokenKind]> = [
-      ["unit", "UNIT"],
-      ["base", "BASE"],
+      ["UNIT", "UNIT"],
       ["as", "AS"],
       ["if", "IF"],
       ["then", "THEN"],
@@ -129,6 +128,11 @@ describe("identifiers and keywords", () => {
     expect(tokenize("declared").tokens[0]).toMatchObject({
       kind: "IDENT",
       lexeme: "declared",
+    })
+    // 'UNIT' is the keyword, but lowercase 'unit' is a plain identifier.
+    expect(tokenize("unit").tokens[0]).toMatchObject({
+      kind: "IDENT",
+      lexeme: "unit",
     })
   })
 })
@@ -243,9 +247,10 @@ describe("composite forms from the spec", () => {
     expect(tokens[0]?.value).toBe("35.5")
   })
 
-  test("unit decl with composite unit", () => {
-    expect(kinds("unit kzt (usd / 467,245543)")).toEqual([
+  test("unit decl with composite body", () => {
+    expect(kinds("UNIT Currency kzt (usd / 467,245543)")).toEqual([
       "UNIT",
+      "IDENT",
       "IDENT",
       "LPAREN",
       "IDENT",

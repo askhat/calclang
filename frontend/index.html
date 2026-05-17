@@ -56,12 +56,12 @@
         <dd>Copy a share link</dd>
       </dl>
       <h2>Syntax</h2>
-      <pre>unit usd base currency
-unit rub (usd / 90,5)
-35,5 rub salary           # variable with unit
-salary + 10 = total       # expression assignment
-salary as usd             # conversion
-100 rub + 5 usd           # bare expression (right unit wins)</pre>
+      <pre>UNIT Currency usd          # base — capitalized dimension, then name
+UNIT (usd / 90,5) rub      # composite — dim inferred from body
+35,5 rub salary            # variable with unit
+salary + 10 = total        # expression assignment
+salary as usd              # conversion
+100 rub + 5 usd            # bare expression (right unit wins)</pre>
       <form method="dialog">
         <button>Close</button>
       </form>

@@ -1,13 +1,13 @@
 # Юниты
-unit usd base currency
-unit kzt (usd / 467,245543)
-unit rub (usd / 90,5)
+UNIT Currency usd
+UNIT Currency kzt (usd / 467,245543)
+UNIT Currency rub (usd / 90,5)
 
-unit kg base mass
-unit gr (kg / 1_000)
+UNIT Mass kg
+UNIT Mass gr (kg / 1_000)
 
-unit m base length
-unit s base time
+UNIT Length m
+UNIT Time s
 
 # Переменные
 -10 minusTen                                      // = -10

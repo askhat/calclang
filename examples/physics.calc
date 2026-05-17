@@ -1,7 +1,7 @@
 # Базовые SI-единицы
-unit m base length
-unit s base time
-unit kg base mass
+UNIT Length m
+UNIT Time s
+UNIT Mass kg
 
 # Производные через скорость и ускорение
 9,8 (m / s ^ 2) gravity

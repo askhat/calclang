@@ -4,7 +4,6 @@ export type TokenKind =
   | "IDENT"
   // keywords
   | "UNIT"
-  | "BASE"
   | "AS"
   | "IF"
   | "THEN"
@@ -49,9 +48,11 @@ export type Token = {
   col: number
 }
 
+// Note: 'UNIT' is intentionally case-sensitive uppercase to leave lowercase
+// 'unit' free as a regular identifier. Dimensions follow the same Capitalized
+// convention (parser enforces). Other keywords stay lowercase.
 export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
-  unit: "UNIT",
-  base: "BASE",
+  UNIT: "UNIT",
   as: "AS",
   if: "IF",
   then: "THEN",

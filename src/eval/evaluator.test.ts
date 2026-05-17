@@ -91,7 +91,7 @@ describe("variables and lazy resolution", () => {
 describe("unit declarations", () => {
   test("base unit registers and 'kg' resolves to Quantity(1, kg)", () => {
     const { results, diagnostics } = run(
-      ["unit kg base mass", "kg"].join("\n"),
+      ["UNIT Mass kg", "kg"].join("\n"),
     )
     expect(diagnostics).toEqual([])
     expect(valueOf(last(results))).toBe("1 kg")
@@ -99,8 +99,8 @@ describe("unit declarations", () => {
 
   test("composite unit registers with the right factor", () => {
     const src = [
-      "unit kg base mass",
-      "unit gr (kg / 1_000)",
+      "UNIT Mass kg",
+      "UNIT Mass gr (kg / 1_000)",
       "gr",
     ].join("\n")
     const { results, registry } = run(src)
@@ -113,8 +113,8 @@ describe("unit declarations", () => {
 
   test("forward reference: composite uses an as-yet-undeclared unit", () => {
     const src = [
-      "unit gr (kg / 1_000)",
-      "unit kg base mass",
+      "UNIT Mass gr (kg / 1_000)",
+      "UNIT Mass kg",
       "1000 gr as kg",
     ].join("\n")
     const { results, diagnostics } = run(src)
@@ -124,8 +124,8 @@ describe("unit declarations", () => {
 
   test("cycle between unit declarations", () => {
     const src = [
-      "unit a (b * 2)",
-      "unit b (a * 2)",
+      "UNIT Mass a (b * 2)",
+      "UNIT Mass b (a * 2)",
       "a",
     ].join("\n")
     const { diagnostics } = run(src)
@@ -134,7 +134,7 @@ describe("unit declarations", () => {
   })
 
   test("name conflict: variable shadows a declared unit", () => {
-    const src = ["unit kg base mass", "5 kg"].join("\n")
+    const src = ["UNIT Mass kg", "5 kg"].join("\n")
     // '5 kg' is var_decl with name kg per the spec; conflicts with unit kg.
     const { diagnostics } = run(src)
     expect(diagnostics.length).toBeGreaterThan(0)
@@ -145,8 +145,8 @@ describe("unit declarations", () => {
 describe("quantity arithmetic and conversions", () => {
   test("spec example: 100 rub + 5 usd ≈ 6.105 usd", () => {
     const src = [
-      "unit usd base currency",
-      "unit rub (usd / 90,5)",
+      "UNIT Currency usd",
+      "UNIT Currency rub (usd / 90,5)",
       "100 rub + 5 usd",
     ].join("\n")
     const { results, diagnostics } = run(src)
@@ -160,8 +160,8 @@ describe("quantity arithmetic and conversions", () => {
 
   test("salary + minusTen = 25,5 rub (from the brief)", () => {
     const src = [
-      "unit usd base currency",
-      "unit rub (usd / 90,5)",
+      "UNIT Currency usd",
+      "UNIT Currency rub (usd / 90,5)",
       "-10 minusTen",
       "35,5 rub salary",
       "salary + minusTen = total",
@@ -174,8 +174,8 @@ describe("quantity arithmetic and conversions", () => {
 
   test("conversion via 'as'", () => {
     const src = [
-      "unit kg base mass",
-      "unit gr (kg / 1_000)",
+      "UNIT Mass kg",
+      "UNIT Mass gr (kg / 1_000)",
       "2500 gr as kg",
     ].join("\n")
     const { results } = run(src)
@@ -184,8 +184,8 @@ describe("quantity arithmetic and conversions", () => {
 
   test("dimension mismatch errors with both dimensions named", () => {
     const src = [
-      "unit kg base mass",
-      "unit usd base currency",
+      "UNIT Mass kg",
+      "UNIT Currency usd",
       "1 kg + 1 usd",
     ].join("\n")
     const { diagnostics } = run(src)
@@ -196,16 +196,16 @@ describe("quantity arithmetic and conversions", () => {
 
   test("composite unit literal: '9,8 (m / s^2) gravity'", () => {
     const src = [
-      "unit m base length",
-      "unit s base time",
+      "UNIT Length m",
+      "UNIT Time s",
       "9,8 (m / s ^ 2) gravity",
       "gravity",
     ].join("\n")
     const { results } = run(src)
     const r = last(results)
     expect(r.value && isQuantity(r.value) && r.value.unit?.dimension).toEqual({
-      length: 1,
-      time: -2,
+      Length: 1,
+      Time: -2,
     })
   })
 })
@@ -243,7 +243,7 @@ describe("conditionals and booleans", () => {
 
   test("comparison with dimensioned and dimensionless is lenient", () => {
     const src = [
-      "unit usd base currency",
+      "UNIT Currency usd",
       "5 usd salary",
       "if salary > 0 then 1 else 0",
     ].join("\n")

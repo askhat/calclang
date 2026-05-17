@@ -9,7 +9,7 @@ import { UnitRegistry } from "../src/units/registry.ts"
 const reg = new UnitRegistry()
 
 // unit usd base currency
-const usd = reg.registerBase("usd", "currency")
+const usd = reg.registerSimple("usd", "currency")
 // unit kzt (usd / 467,245543)
 const kzt = reg.registerDerived(
   "kzt",
@@ -39,7 +39,7 @@ const sum = Q.add(Q.ofUnit(100, rub), Q.ofUnit(5, usd))
 console.log(`100 rub + 5 usd   = ${fmt(sum)}`)
 
 // kg + rub → dimension mismatch
-const kg = reg.registerBase("kg", "mass")
+const kg = reg.registerSimple("kg", "mass")
 try {
   Q.add(Q.ofUnit(1, kg), Q.ofUnit(1, rub))
 } catch (e) {

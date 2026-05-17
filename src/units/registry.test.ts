@@ -4,46 +4,45 @@ import { UnitError } from "./errors.ts"
 import * as Q from "./quantity.ts"
 import { UnitRegistry } from "./registry.ts"
 
-describe("registerBase", () => {
+describe("registerSimple", () => {
   test("creates a unit with factor 1 and a single-component dimension", () => {
     const reg = new UnitRegistry()
-    const kg = reg.registerBase("kg", "mass")
+    const kg = reg.registerSimple("kg", "Mass")
     expect(kg.name).toBe("kg")
-    expect(kg.dimension).toEqual({ mass: 1 })
+    expect(kg.dimension).toEqual({ Mass: 1 })
     expect(kg.factor.toString()).toBe("1")
+  })
+
+  test("second unit in the same dimension also gets factor 1 (placeholder for FX)", () => {
+    const reg = new UnitRegistry()
+    reg.registerSimple("usd", "Currency")
+    const kzt = reg.registerSimple("kzt", "Currency")
+    expect(kzt.dimension).toEqual({ Currency: 1 })
+    expect(kzt.factor.toString()).toBe("1")
   })
 
   test("duplicate name throws", () => {
     const reg = new UnitRegistry()
-    reg.registerBase("kg", "mass")
-    expect(() => reg.registerBase("kg", "mass")).toThrow(UnitError)
-  })
-})
-
-describe("registerAlias", () => {
-  test("creates a unit with factor 1 (placeholder for dynamic FX)", () => {
-    const reg = new UnitRegistry()
-    const kzt = reg.registerAlias("kzt", "currency")
-    expect(kzt.dimension).toEqual({ currency: 1 })
-    expect(kzt.factor.toString()).toBe("1")
+    reg.registerSimple("kg", "Mass")
+    expect(() => reg.registerSimple("kg", "Mass")).toThrow(UnitError)
   })
 })
 
 describe("registerDerived", () => {
   test("from spec: rub = usd / 90.5", () => {
     const reg = new UnitRegistry()
-    const usd = reg.registerBase("usd", "currency")
+    const usd = reg.registerSimple("usd", "Currency")
     // body of unit decl evaluates to (1/90.5) usd; we pass that quantity in.
     const body = Q.div(Q.ofUnit(1, usd), Q.dimensionless("90.5"))
     const rub = reg.registerDerived("rub", body)
-    expect(rub.dimension).toEqual({ currency: 1 })
+    expect(rub.dimension).toEqual({ Currency: 1 })
     // 1 rub = 1/90.5 usd-base ≈ 0.011049...
     expect(rub.factor.toFixed(10)).toBe("0.0110497238")
   })
 
   test("from spec: gr = kg / 1000", () => {
     const reg = new UnitRegistry()
-    const kg = reg.registerBase("kg", "mass")
+    const kg = reg.registerSimple("kg", "Mass")
     const body = Q.div(Q.ofUnit(1, kg), Q.dimensionless(1000))
     const gr = reg.registerDerived("gr", body)
     expect(gr.factor.toString()).toBe("0.001")
@@ -51,7 +50,7 @@ describe("registerDerived", () => {
 
   test("derived from another derived: factors compose", () => {
     const reg = new UnitRegistry()
-    const kg = reg.registerBase("kg", "mass")
+    const kg = reg.registerSimple("kg", "Mass")
     const gr = reg.registerDerived(
       "gr",
       Q.div(Q.ofUnit(1, kg), Q.dimensionless(1000)),
@@ -72,7 +71,7 @@ describe("registerDerived", () => {
     try {
       reg.registerDerived("nope", Q.dimensionless(5))
     } catch (e) {
-      expect((e as UnitError).hint).toContain("unit nope")
+      expect((e as UnitError).hint).toContain("nope")
     }
   })
 })
@@ -80,7 +79,7 @@ describe("registerDerived", () => {
 describe("get / has / all", () => {
   test("get returns the registered unit", () => {
     const reg = new UnitRegistry()
-    const kg = reg.registerBase("kg", "mass")
+    const kg = reg.registerSimple("kg", "Mass")
     expect(reg.get("kg")).toBe(kg)
   })
 
@@ -91,16 +90,16 @@ describe("get / has / all", () => {
 
   test("has reports presence", () => {
     const reg = new UnitRegistry()
-    reg.registerBase("kg", "mass")
+    reg.registerSimple("kg", "Mass")
     expect(reg.has("kg")).toBe(true)
     expect(reg.has("rub")).toBe(false)
   })
 
   test("all yields units in declaration order", () => {
     const reg = new UnitRegistry()
-    reg.registerBase("kg", "mass")
-    reg.registerBase("m", "length")
-    reg.registerBase("s", "time")
+    reg.registerSimple("kg", "Mass")
+    reg.registerSimple("m", "Length")
+    reg.registerSimple("s", "Time")
     expect([...reg.all()].map((u) => u.name)).toEqual(["kg", "m", "s"])
   })
 })
@@ -108,7 +107,7 @@ describe("get / has / all", () => {
 describe("end-to-end: budget.calc unit chain", () => {
   test("conversion via the registered chain matches direct arithmetic", () => {
     const reg = new UnitRegistry()
-    const usd = reg.registerBase("usd", "currency")
+    const usd = reg.registerSimple("usd", "Currency")
     const rub = reg.registerDerived(
       "rub",
       Q.div(Q.ofUnit(1, usd), Q.dimensionless("90.5")),
