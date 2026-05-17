@@ -1,0 +1,20 @@
+# Юниты
+declare usd base currency
+declare kzt (usd / 467,245543)
+declare rub (usd / 90,5)
+
+declare kg base mass
+declare gr (kg / 1_000)
+
+declare m base length
+declare s base time
+
+# Переменные
+-10 minusTen
+35,5 rub salary
+2 kg flour
+
+# Выражения с присваиванием
+salary + minusTen = total       # total = 25,5 rub
+salary as kzt = salaryInKzt     # конверсия
+100 rub + 5 usd                 # = 105 usd (правый юнит побеждает)

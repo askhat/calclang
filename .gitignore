@@ -1,0 +1,10 @@
+node_modules/
+bun.lockb
+.DS_Store
+*.log
+
+# editors / local tooling
+.vscode/
+!.vscode/extensions.json
+.idea/
+.claude/settings.local.json

@@ -1,0 +1,22 @@
+{
+  "name": "calc",
+  "version": "0.0.1",
+  "description": "A text-based calculator language with first-class units",
+  "module": "src/index.ts",
+  "type": "module",
+  "bin": {
+    "calc": "src/index.ts"
+  },
+  "scripts": {
+    "calc": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "decimal.js": "^10.4.3"
+  }
+}
