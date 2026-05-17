@@ -6,9 +6,12 @@ const positional = argv.filter((a) => !a.startsWith("--"))
 const path = positional[0]
 
 if (!path) {
-  console.error("usage: calc [--tokens] <file.calc>")
+  console.error("usage: calc [--tokens|--ast] <file.calc>")
   process.exit(1)
 }
 
-const opts: RunOptions = { tokens: flags.has("--tokens") }
+const opts: RunOptions = {
+  tokens: flags.has("--tokens"),
+  ast: flags.has("--ast"),
+}
 await runFile(path, opts)
