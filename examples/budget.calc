@@ -17,4 +17,4 @@ declare s base time
 # Выражения с присваиванием
 salary + minusTen = total       # total = 25,5 rub
 salary as kzt = salaryInKzt     # конверсия
-100 rub + 5 usd                 # = 105 usd (правый юнит побеждает)
+100 rub + 5 usd                 # = 15 usd (правый юнит побеждает, рубли сконвертируются в доллары)
