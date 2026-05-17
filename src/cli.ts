@@ -1,8 +1,8 @@
 import { formatDiagnostic, type Diagnostic } from "./errors/diagnostic.ts"
 import { tokenize } from "./lexer/lexer.ts"
 import type { Token } from "./lexer/token.ts"
-import { showExpr } from "./parser/ast.ts"
-import { parseExpression } from "./parser/parser.ts"
+import { showProgram } from "./parser/ast.ts"
+import { parseProgram } from "./parser/parser.ts"
 
 export type RunOptions = {
   tokens?: boolean
@@ -44,9 +44,9 @@ function dumpTokens(source: string, path: string): void {
 function dumpAst(source: string, path: string): void {
   const { tokens, diagnostics: lexErrors } = tokenize(source)
   reportDiagnostics(lexErrors, path)
-  const { expr, diagnostics: parseErrors } = parseExpression(tokens)
+  const { program, diagnostics: parseErrors } = parseProgram(tokens)
   reportDiagnostics(parseErrors, path)
-  if (expr) console.log(showExpr(expr))
+  if (program.statements.length > 0) console.log(showProgram(program))
   if (lexErrors.length + parseErrors.length > 0) process.exit(1)
 }
 
