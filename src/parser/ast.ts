@@ -36,6 +36,7 @@ export type Expr =
   | BinaryExpr
   | IfExpr
   | ConversionExpr
+  | PropertyAccess
 
 export type NumberLit = {
   type: "number"
@@ -98,6 +99,18 @@ export type ConversionExpr = {
   pos: Position
 }
 
+/**
+ * `target.property` — used to access aggregate values on a series, e.g.
+ * `prices.sum`. In MVP `target` is expected to be an Identifier referring
+ * to a series; other shapes produce an eval-time error.
+ */
+export type PropertyAccess = {
+  type: "property"
+  target: Expr
+  property: string
+  pos: Position
+}
+
 // -- Statements --
 
 /**
@@ -144,7 +157,24 @@ export type ExprStatement = {
   pos: Position
 }
 
-export type Statement = UnitDecl | VariableDecl | ExprAssignment | ExprStatement
+/**
+ * `SERIES <name>` followed by member-expression lines on subsequent lines.
+ * Terminated by a blank line, EOF, or another top-level keyword. Members
+ * must share a dimension at evaluation time.
+ */
+export type SeriesDecl = {
+  type: "seriesDecl"
+  name: string
+  members: Expr[]
+  pos: Position
+}
+
+export type Statement =
+  | UnitDecl
+  | VariableDecl
+  | ExprAssignment
+  | ExprStatement
+  | SeriesDecl
 
 export type Program = {
   statements: Statement[]
@@ -168,6 +198,8 @@ export function showExpr(e: Expr): string {
       return `(if ${showExpr(e.cond)} ${showExpr(e.then)} ${showExpr(e.else)})`
     case "conversion":
       return `(as ${showExpr(e.expr)} ${showUnitExpr(e.unit)})`
+    case "property":
+      return `(prop ${showExpr(e.target)} ${e.property})`
   }
 }
 
@@ -194,6 +226,10 @@ export function showStatement(s: Statement): string {
       return `(= ${s.name} ${showExpr(s.expr)})`
     case "exprStatement":
       return showExpr(s.expr)
+    case "seriesDecl": {
+      const ms = s.members.map(showExpr).join(" ")
+      return `(series ${s.name}${ms ? " " + ms : ""})`
+    }
   }
 }
 

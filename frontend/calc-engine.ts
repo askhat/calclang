@@ -6,6 +6,13 @@ import { parseProgram } from "../src/parser/parser.ts"
 import type { Quantity } from "../src/units/quantity.ts"
 import type { Unit } from "../src/units/unit.ts"
 
+export type SeriesSummary = {
+  name: string
+  count: number
+  /** Same unit as `count.unit` for display (null = dimensionless). */
+  sumUnit: string | null
+}
+
 export type EngineRun = {
   source: string
   results: RunResult[]
@@ -18,6 +25,8 @@ export type EngineRun = {
   variables: Array<{ name: string; value: Quantity | boolean }>
   /** Registered units for sidebar. */
   units: Unit[]
+  /** Ready series for sidebar. */
+  series: SeriesSummary[]
 }
 
 /**
@@ -39,6 +48,17 @@ export function runPipeline(source: string): EngineRun {
     }
 
     const units = [...ev.registry.all()]
+
+    const series: SeriesSummary[] = []
+    for (const [name, value] of ev.readySeries()) {
+      const first = value.members[0]
+      series.push({
+        name,
+        count: value.members.length,
+        sumUnit: first?.unit?.name ?? null,
+      })
+    }
+
     const allDiagnostics = dedupeAndSort([
       ...lexDiagnostics,
       ...parseDiagnostics,
@@ -54,6 +74,7 @@ export function runPipeline(source: string): EngineRun {
       allDiagnostics,
       variables,
       units,
+      series,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -73,6 +94,7 @@ export function runPipeline(source: string): EngineRun {
       ],
       variables: [],
       units: [],
+      series: [],
     }
   }
 }

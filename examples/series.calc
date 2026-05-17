@@ -1,0 +1,29 @@
+# SERIES — собираем числа в группу и применяем агрегаты
+
+SERIES foo
+100
+20
+222
+500
+-3909
+0
+
+foo.count
+foo.sum
+foo.avg
+foo.min
+foo.max
+
+# Серии работают с юнитами тоже — пока все члены одной размерности
+
+UNIT Currency usd
+UNIT (usd / 90,5) rub
+
+SERIES wallet
+100 rub
+5 usd
+2000 rub
+50 usd
+
+wallet.sum
+wallet.avg

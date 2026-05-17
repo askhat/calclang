@@ -8,6 +8,7 @@ import type {
   ExprStatement,
   Position,
   Program,
+  SeriesDecl,
   Statement,
   UnaryOp,
   UnitDecl,
@@ -118,9 +119,16 @@ class Parser {
     while (this.peek().kind !== "EOF") {
       const stmt = this.parseStatement()
       if (stmt) statements.push(stmt)
-      // If we're not at line end (either statement parsed but tokens linger,
-      // or parsing failed mid-line), report and skip to next line.
-      if (this.peek().kind !== "NEWLINE" && this.peek().kind !== "EOF") {
+      // A statement is followed by a newline, EOF, or the next top-level
+      // keyword (UNIT / SERIES — used when a block statement stops just
+      // before the next statement's header without consuming a newline).
+      const after = this.peek().kind
+      const atBoundary =
+        after === "NEWLINE" ||
+        after === "EOF" ||
+        after === "UNIT" ||
+        after === "SERIES"
+      if (!atBoundary) {
         if (stmt) {
           this.diagnose(
             this.peek(),
@@ -137,8 +145,49 @@ class Parser {
   private parseStatement(): Statement | null {
     const t = this.peek()
     if (t.kind === "UNIT") return this.parseDeclaration()
+    if (t.kind === "SERIES") return this.parseSeriesDecl()
     if (this.isVariableDeclStart()) return this.parseVariableDecl()
     return this.parseExpressionOrAssignment()
+  }
+
+  private parseSeriesDecl(): SeriesDecl | null {
+    const seriesTok = this.advance() // 'SERIES'
+    const nameTok = this.expect("IDENT")
+    if (!nameTok) return null
+    // The header takes its own line; members follow on subsequent lines.
+    if (!this.expect("NEWLINE")) return null
+
+    const members: Expr[] = []
+    while (true) {
+      const k = this.peek().kind
+      // Blank line / EOF / next top-level keyword → end of series.
+      if (k === "NEWLINE" || k === "EOF" || k === "UNIT" || k === "SERIES") break
+
+      const expr = this.parseExpressionRule()
+      if (!expr) {
+        // Skip the broken line and keep collecting members.
+        this.syncToLineEnd()
+        if (this.peek().kind === "NEWLINE") this.advance()
+        continue
+      }
+      members.push(expr)
+      if (this.peek().kind === "NEWLINE") {
+        this.advance()
+      } else if (this.peek().kind !== "EOF") {
+        this.diagnose(
+          this.peek(),
+          `unexpected ${describe(this.peek())} after series member`,
+        )
+        this.syncToLineEnd()
+      }
+    }
+
+    return {
+      type: "seriesDecl",
+      name: nameTok.lexeme,
+      members,
+      pos: pos(seriesTok),
+    }
   }
 
   /** Pure-lookahead test for the [+|-]? NUMBER ... IDENT (NEWLINE|EOF) shape. */
@@ -420,8 +469,21 @@ class Parser {
   }
 
   private parseConversion(): Expr | null {
-    const expr = this.parsePrimary()
+    let expr = this.parsePrimary()
     if (!expr) return null
+    // Property access binds tighter than `as`: `foo.sum as kzt` parses as
+    // `(foo.sum) as kzt`. Chained: `a.b.c` → ((a.b).c).
+    while (this.peek().kind === "DOT") {
+      const dotTok = this.advance()
+      const propTok = this.expect("IDENT")
+      if (!propTok) return null
+      expr = {
+        type: "property",
+        target: expr,
+        property: propTok.lexeme,
+        pos: pos(dotTok),
+      }
+    }
     if (this.peek().kind === "AS") {
       const asTok = this.advance()
       const unit = this.parseUnitExpr()

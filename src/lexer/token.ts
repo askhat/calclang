@@ -4,6 +4,7 @@ export type TokenKind =
   | "IDENT"
   // keywords
   | "UNIT"
+  | "SERIES"
   | "AS"
   | "IF"
   | "THEN"
@@ -26,6 +27,7 @@ export type TokenKind =
   | "GTE"
   | "QUESTION"
   | "COLON"
+  | "DOT"
   | "LPAREN"
   | "RPAREN"
   // structural
@@ -53,6 +55,7 @@ export type Token = {
 // convention (parser enforces). Other keywords stay lowercase.
 export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
   UNIT: "UNIT",
+  SERIES: "SERIES",
   as: "AS",
   if: "IF",
   then: "THEN",

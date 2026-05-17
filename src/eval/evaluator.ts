@@ -6,6 +6,7 @@ import type {
   ExprAssignment,
   Position,
   Program,
+  SeriesDecl,
   Statement,
   UnitDecl,
   UnitExpr,
@@ -29,6 +30,18 @@ type VarBinding =
   | { state: "pending"; decl: VariableDecl | ExprAssignment }
   | { state: "resolving" }
   | { state: "ready"; value: Value }
+
+type SeriesValue = {
+  /** Evaluated members in source order. All share `dimension`. */
+  members: Quantity[]
+  /** Unified dimension vector for the members (`{}` for dimensionless). */
+  dimension: import("../units/dimension.ts").DimensionVector
+}
+
+type SeriesBinding =
+  | { state: "pending"; decl: SeriesDecl }
+  | { state: "resolving" }
+  | { state: "ready"; value: SeriesValue }
 
 export type RunResult = {
   stmt: Statement
@@ -62,6 +75,7 @@ export class Evaluator {
   readonly registry = new UnitRegistry()
   readonly diagnostics: Diagnostic[] = []
   private readonly varEnv = new Map<string, VarBinding>()
+  private readonly seriesEnv = new Map<string, SeriesBinding>()
   private readonly pendingUnits = new Map<string, UnitDecl>()
   private readonly resolvingStack: string[] = []
 
@@ -135,7 +149,33 @@ export class Evaluator {
           break
         case "exprStatement":
           break
+        case "seriesDecl":
+          if (this.seriesEnv.has(stmt.name)) {
+            this.report(
+              `series '${stmt.name}' is already declared`,
+              stmt.pos,
+              "each series may be declared only once",
+            )
+            continue
+          }
+          if (this.varEnv.has(stmt.name) || this.pendingUnits.has(stmt.name)) {
+            this.report(
+              `name '${stmt.name}' is already declared`,
+              stmt.pos,
+              "the name must be unique across units, variables, and series",
+            )
+            continue
+          }
+          this.seriesEnv.set(stmt.name, { state: "pending", decl: stmt })
+          break
       }
+    }
+  }
+
+  /** Ready series, for sidebar / debug introspection. */
+  *readySeries(): IterableIterator<[string, SeriesValue]> {
+    for (const [name, b] of this.seriesEnv) {
+      if (b.state === "ready") yield [name, b.value]
     }
   }
 
@@ -164,6 +204,13 @@ export class Evaluator {
         case "exprStatement": {
           const value = this.evalExpr(stmt.expr)
           return { stmt, value, error: null }
+        }
+        case "seriesDecl": {
+          if (!this.seriesEnv.has(stmt.name)) {
+            return { stmt, value: null, error: null }
+          }
+          this.resolveSeries(stmt.name, stmt.pos)
+          return { stmt, value: null, error: null }
         }
       }
     } catch (err) {
@@ -316,8 +363,16 @@ export class Evaluator {
         if (this.varEnv.has(expr.name)) {
           return this.resolveVar(expr.name, expr.pos)
         }
+        if (this.seriesEnv.has(expr.name)) {
+          throw new EvalError(
+            `'${expr.name}' is a series — use it via a method like '${expr.name}.sum' or '${expr.name}.avg'`,
+            expr.pos,
+            "available methods: sum, avg, count, min, max",
+          )
+        }
         const allNames = new Set<string>(this.allUnitNames())
         for (const n of this.varEnv.keys()) allNames.add(n)
+        for (const n of this.seriesEnv.keys()) allNames.add(n)
         throw new EvalError(
           `undefined name '${expr.name}'`,
           expr.pos,
@@ -370,6 +425,67 @@ export class Evaluator {
           throw EvalError.from(err, expr.pos)
         }
       }
+      case "property": {
+        // MVP: only series support property access. Other targets get a
+        // clearer error than "cannot read property of …".
+        if (expr.target.type !== "ident") {
+          throw new EvalError(
+            "property access is only supported on series identifiers",
+            expr.pos,
+          )
+        }
+        const series = this.resolveSeries(expr.target.name, expr.target.pos)
+        return computeAggregate(series, expr.property, expr.pos)
+      }
+    }
+  }
+
+  private resolveSeries(name: string, refPos: Position): SeriesValue {
+    const binding = this.seriesEnv.get(name)
+    if (!binding) {
+      throw new EvalError(
+        `undefined series '${name}'`,
+        refPos,
+        this.didYouMean(name, this.seriesEnv.keys()),
+      )
+    }
+    if (binding.state === "ready") return binding.value
+    if (binding.state === "resolving") {
+      throw new EvalError(
+        `cyclic dependency: ${this.cycleTrail(name)}`,
+        refPos,
+      )
+    }
+
+    const original = binding
+    this.seriesEnv.set(name, { state: "resolving" })
+    this.resolvingStack.push(name)
+    try {
+      const members: Quantity[] = []
+      let dim: import("../units/dimension.ts").DimensionVector | null = null
+      for (const memberExpr of original.decl.members) {
+        const v = this.evalExpr(memberExpr)
+        const q = asQuantity(v, memberExpr.pos)
+        const qDim = q.unit?.dimension ?? {}
+        if (dim === null) {
+          dim = qDim
+        } else if (!Dim.equals(dim, qDim)) {
+          throw new EvalError(
+            `series '${name}' mixes dimensions: ${Dim.format(dim)} and ${Dim.format(qDim)}`,
+            memberExpr.pos,
+            "all members of a series must share a dimension",
+          )
+        }
+        members.push(q)
+      }
+      const value: SeriesValue = { members, dimension: dim ?? {} }
+      this.seriesEnv.set(name, { state: "ready", value })
+      return value
+    } catch (err) {
+      this.seriesEnv.set(name, original)
+      throw err
+    } finally {
+      this.resolvingStack.pop()
     }
   }
 
@@ -433,4 +549,88 @@ export function evaluateProgram(program: Program): EvalResult {
   const ev = new Evaluator()
   const results = ev.feed(program)
   return { results, diagnostics: ev.diagnostics, registry: ev.registry }
+}
+
+// -- Series aggregate helpers --
+
+const AGGREGATE_METHODS = new Set(["sum", "avg", "count", "min", "max"])
+
+function computeAggregate(
+  series: SeriesValue,
+  method: string,
+  pos: Position,
+): Value {
+  if (method === "count") {
+    return { value: new Decimal(series.members.length), unit: null }
+  }
+  if (!AGGREGATE_METHODS.has(method)) {
+    throw new EvalError(
+      `unknown series method '.${method}'`,
+      pos,
+      "available methods: sum, avg, count, min, max",
+    )
+  }
+  if (series.members.length === 0) {
+    throw new EvalError(
+      `cannot compute '.${method}' on an empty series`,
+      pos,
+      "either add members or use '.count' which is 0 for empty series",
+    )
+  }
+
+  switch (method) {
+    case "sum":
+      return sumSeries(series, pos)
+    case "avg":
+      return avgSeries(series, pos)
+    case "min":
+      return extremeSeries(series, pos, "min")
+    case "max":
+      return extremeSeries(series, pos, "max")
+  }
+  // Should be unreachable thanks to AGGREGATE_METHODS check above.
+  throw new EvalError(`unhandled aggregate '${method}'`, pos)
+}
+
+function sumSeries(series: SeriesValue, pos: Position): Quantity {
+  try {
+    let acc = series.members[0]!
+    for (let i = 1; i < series.members.length; i++) {
+      // Q.add lets the right operand's unit win; pass acc on the right
+      // so the result keeps the first member's unit.
+      acc = Q.add(series.members[i]!, acc)
+    }
+    return acc
+  } catch (err) {
+    throw EvalError.from(err, pos)
+  }
+}
+
+function avgSeries(series: SeriesValue, pos: Position): Quantity {
+  const total = sumSeries(series, pos)
+  try {
+    return Q.div(total, {
+      value: new Decimal(series.members.length),
+      unit: null,
+    })
+  } catch (err) {
+    throw EvalError.from(err, pos)
+  }
+}
+
+function extremeSeries(
+  series: SeriesValue,
+  pos: Position,
+  kind: "min" | "max",
+): Quantity {
+  try {
+    let best = series.members[0]!
+    for (let i = 1; i < series.members.length; i++) {
+      const cmp = Q.compare(series.members[i]!, best)
+      if (kind === "min" ? cmp < 0 : cmp > 0) best = series.members[i]!
+    }
+    return best
+  } catch (err) {
+    throw EvalError.from(err, pos)
+  }
 }

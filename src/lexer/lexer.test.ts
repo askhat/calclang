@@ -75,10 +75,12 @@ describe("numbers", () => {
     expect(diagnostics[0]?.hint).toContain(".")
   })
 
-  test("dot in comma-locale gets a helpful diagnostic", () => {
-    const { diagnostics } = tokenize("35.5")
-    expect(diagnostics).toHaveLength(1)
-    expect(diagnostics[0]?.hint).toContain(",")
+  test("'.' in comma-locale tokenizes as DOT (property access)", () => {
+    // '.' is no longer reserved for a decimal-separator diagnostic — it's
+    // now a real DOT token, used by `foo.avg` style property access.
+    const { tokens, diagnostics } = tokenize("35.5")
+    expect(diagnostics).toEqual([])
+    expect(tokens.map((t) => t.kind)).toEqual(["NUMBER", "DOT", "NUMBER", "EOF"])
   })
 })
 
