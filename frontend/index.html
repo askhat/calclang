@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calc</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="brand-mark">∑</span>
+        <span class="brand-name">Calc</span>
+      </div>
+      <div class="header-actions">
+        <button id="snapshot-btn" title="Capture a snapshot to compare results against later edits">
+          Snapshot
+        </button>
+        <button id="share-btn" title="Copy a shareable link to the clipboard">
+          Share
+        </button>
+        <button id="help-btn" title="Show keyboard shortcuts">?</button>
+      </div>
+    </header>
+    <main>
+      <div id="editor"></div>
+      <aside>
+        <section class="panel">
+          <h2>Variables</h2>
+          <ul id="vars-list" class="kv-list">
+            <li class="empty">(none yet)</li>
+          </ul>
+        </section>
+        <section class="panel">
+          <h2>Units</h2>
+          <ul id="units-list" class="kv-list">
+            <li class="empty">(none yet)</li>
+          </ul>
+        </section>
+        <section class="panel">
+          <h2>Diagnostics</h2>
+          <ul id="diagnostics-list" class="kv-list">
+            <li class="empty">(none)</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+    <dialog id="help-dialog">
+      <h2>Keyboard shortcuts</h2>
+      <dl>
+        <dt><kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd></dt>
+        <dd>Nudge a number under the cursor</dd>
+        <dt><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></dt>
+        <dd>Take a snapshot</dd>
+        <dt><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></dt>
+        <dd>Copy a share link</dd>
+      </dl>
+      <h2>Syntax</h2>
+      <pre>declare usd base currency
+declare rub (usd / 90,5)
+35,5 rub salary           # variable with unit
+salary + 10 = total       # expression assignment
+salary as usd             # conversion
+100 rub + 5 usd           # bare expression (right unit wins)</pre>
+      <form method="dialog">
+        <button>Close</button>
+      </form>
+    </dialog>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

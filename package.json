@@ -9,6 +9,7 @@
   },
   "scripts": {
     "calc": "bun run src/index.ts",
+    "dev": "bun run --hot src/server.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },
@@ -17,6 +18,15 @@
     "typescript": "^5.6.0"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.2",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/lint": "^6.9.6",
+    "@codemirror/search": "^6.7.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.43.0",
+    "@lezer/highlight": "^1.2.3",
+    "codemirror": "^6.0.2",
     "decimal.js": "^10.4.3"
   }
 }
