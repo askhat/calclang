@@ -1,7 +1,13 @@
 import Decimal from "decimal.js"
 import * as Dim from "./dimension.ts"
 import { UnitError } from "./errors.ts"
-import type { Unit } from "./unit.ts"
+import {
+  divAtoms,
+  makeComposedUnit,
+  mulAtoms,
+  powAtoms,
+  type Unit,
+} from "./unit.ts"
 
 export type Quantity = {
   readonly value: Decimal
@@ -93,11 +99,11 @@ export function mul(a: Quantity, b: Quantity): Quantity {
 
   return {
     value: a.value.times(b.value),
-    unit: {
-      name: composeName(a.unit.name, b.unit.name, "mul"),
-      dimension: newDim,
-      factor: a.unit.factor.times(b.unit.factor),
-    },
+    unit: makeComposedUnit(
+      mulAtoms(a.unit.atoms, b.unit.atoms),
+      newDim,
+      a.unit.factor.times(b.unit.factor),
+    ),
   }
 }
 
@@ -115,11 +121,11 @@ export function div(a: Quantity, b: Quantity): Quantity {
   if (!a.unit) {
     return {
       value: value.div(b.unit.factor),
-      unit: {
-        name: `1/${b.unit.name}`,
-        dimension: Dim.pow(b.unit.dimension, -1),
-        factor: new Decimal(1).div(b.unit.factor),
-      },
+      unit: makeComposedUnit(
+        powAtoms(b.unit.atoms, -1),
+        Dim.pow(b.unit.dimension, -1),
+        new Decimal(1).div(b.unit.factor),
+      ),
     }
   }
   // Both dimensioned.
@@ -132,17 +138,12 @@ export function div(a: Quantity, b: Quantity): Quantity {
   }
   return {
     value,
-    unit: {
-      name: composeName(a.unit.name, b.unit.name, "div"),
-      dimension: newDim,
-      factor: a.unit.factor.div(b.unit.factor),
-    },
+    unit: makeComposedUnit(
+      divAtoms(a.unit.atoms, b.unit.atoms),
+      newDim,
+      a.unit.factor.div(b.unit.factor),
+    ),
   }
-}
-
-function composeName(a: string, b: string, op: "mul" | "div"): string {
-  // NOT canonicalized (e.g. 'm·m' instead of 'm^2'). Stage 7 polish.
-  return op === "mul" ? `${a}·${b}` : `${a}/${b}`
 }
 
 // -- Power --
@@ -174,11 +175,11 @@ export function pow(base: Quantity, exp: Quantity): Quantity {
   const n = exp.value.toNumber()
   return {
     value: base.value.pow(exp.value),
-    unit: {
-      name: `${base.unit.name}^${n}`,
-      dimension: Dim.pow(base.unit.dimension, n),
-      factor: base.unit.factor.pow(n),
-    },
+    unit: makeComposedUnit(
+      powAtoms(base.unit.atoms, n),
+      Dim.pow(base.unit.dimension, n),
+      base.unit.factor.pow(n),
+    ),
   }
 }
 

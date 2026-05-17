@@ -15,6 +15,7 @@ import * as Q from "../units/quantity.ts"
 import type { Quantity } from "../units/quantity.ts"
 import { UnitRegistry } from "../units/registry.ts"
 import type { Unit } from "../units/unit.ts"
+import { suggest } from "../util/levenshtein.ts"
 import { EvalError } from "./errors.ts"
 import { asBoolean, asQuantity, type Value } from "./value.ts"
 
@@ -186,7 +187,11 @@ export class Evaluator {
 
     const decl = this.pendingUnits.get(name)
     if (!decl) {
-      throw new EvalError(`undefined unit '${name}'`, refPos)
+      throw new EvalError(
+        `undefined unit '${name}'`,
+        refPos,
+        this.didYouMean(name, this.allUnitNames()),
+      )
     }
 
     this.resolvingStack.push(name)
@@ -223,7 +228,11 @@ export class Evaluator {
   private resolveVar(name: string, refPos: Position): Value {
     const binding = this.varEnv.get(name)
     if (!binding) {
-      throw new EvalError(`undefined variable '${name}'`, refPos)
+      throw new EvalError(
+        `undefined variable '${name}'`,
+        refPos,
+        this.didYouMean(name, this.varEnv.keys()),
+      )
     }
     if (binding.state === "ready") return binding.value
     if (binding.state === "resolving") {
@@ -291,7 +300,13 @@ export class Evaluator {
         if (this.varEnv.has(expr.name)) {
           return this.resolveVar(expr.name, expr.pos)
         }
-        throw new EvalError(`undefined name '${expr.name}'`, expr.pos)
+        const allNames = new Set<string>(this.allUnitNames())
+        for (const n of this.varEnv.keys()) allNames.add(n)
+        throw new EvalError(
+          `undefined name '${expr.name}'`,
+          expr.pos,
+          this.didYouMean(expr.name, allNames),
+        )
       }
       case "unary": {
         if (expr.op === "not") {
@@ -382,6 +397,19 @@ export class Evaluator {
 
   private report(message: string, pos: Position, hint?: string): void {
     this.diagnostics.push(new EvalError(message, pos, hint).toDiagnostic())
+  }
+
+  private *allUnitNames(): IterableIterator<string> {
+    for (const u of this.registry.all()) yield u.name
+    for (const name of this.pendingUnits.keys()) yield name
+  }
+
+  private didYouMean(
+    query: string,
+    candidates: Iterable<string>,
+  ): string | undefined {
+    const match = suggest(query, candidates)
+    return match ? `did you mean '${match}'?` : undefined
   }
 }
 

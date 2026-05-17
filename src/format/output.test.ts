@@ -11,14 +11,10 @@ import {
   formatValue,
   replLine,
 } from "./output.ts"
-import type { Unit } from "../units/unit.ts"
+import { makeNamedUnit } from "../units/unit.ts"
 import type { RunResult } from "../eval/evaluator.ts"
 
-const kg: Unit = {
-  name: "kg",
-  dimension: { mass: 1 },
-  factor: new Decimal(1),
-}
+const kg = makeNamedUnit("kg", { mass: 1 }, new Decimal(1))
 
 describe("formatDecimal", () => {
   test("default locale uses comma + space thousands", () => {

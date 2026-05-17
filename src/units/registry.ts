@@ -1,18 +1,16 @@
 import Decimal from "decimal.js"
 import { UnitError } from "./errors.ts"
 import type { Quantity } from "./quantity.ts"
-import type { Unit } from "./unit.ts"
+import { makeNamedUnit, type Unit } from "./unit.ts"
 
 export class UnitRegistry {
   private readonly byName = new Map<string, Unit>()
 
   /** declare X base DIM — fresh dimension with unit factor 1. */
   registerBase(name: string, dimension: string): Unit {
-    return this.add({
-      name,
-      dimension: { [dimension]: 1 },
-      factor: new Decimal(1),
-    })
+    return this.add(
+      makeNamedUnit(name, { [dimension]: 1 }, new Decimal(1)),
+    )
   }
 
   /**
@@ -21,11 +19,9 @@ export class UnitRegistry {
    * interface is in place so a future stage can attach a rate source.
    */
   registerAlias(name: string, dimension: string): Unit {
-    return this.add({
-      name,
-      dimension: { [dimension]: 1 },
-      factor: new Decimal(1),
-    })
+    return this.add(
+      makeNamedUnit(name, { [dimension]: 1 }, new Decimal(1)),
+    )
   }
 
   /**
@@ -40,11 +36,13 @@ export class UnitRegistry {
         `the body of 'declare ${name} (...)' must reference at least one declared unit`,
       )
     }
-    return this.add({
-      name,
-      dimension: value.unit.dimension,
-      factor: value.value.times(value.unit.factor),
-    })
+    return this.add(
+      makeNamedUnit(
+        name,
+        value.unit.dimension,
+        value.value.times(value.unit.factor),
+      ),
+    )
   }
 
   private add(u: Unit): Unit {

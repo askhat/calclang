@@ -1,0 +1,16 @@
+# Базовые SI-единицы
+declare m base length
+declare s base time
+declare kg base mass
+
+# Производные через скорость и ускорение
+9,8 (m / s ^ 2) gravity                           // = 9,8 m/s^2
+10 s fallTime                                     // = 10 s
+
+# Свободное падение: v = g * t,  d = g * t^2 / 2
+gravity * fallTime = velocity                     // = 98 m/s
+gravity * fallTime ^ 2 / 2 = distance             // = 490 m
+
+# Сила (Ньютон): F = m * a
+70 kg mass                                        // = 70 kg
+mass * gravity = weight                           // = 686 kg·m/s^2

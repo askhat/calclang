@@ -2,40 +2,16 @@ import { describe, expect, test } from "bun:test"
 import Decimal from "decimal.js"
 import { UnitError } from "./errors.ts"
 import * as Q from "./quantity.ts"
-import type { Unit } from "./unit.ts"
+import { makeNamedUnit, type Unit } from "./unit.ts"
 
 // -- Test fixtures: hand-built units (no registry; that's tested elsewhere) --
 
-const kg: Unit = {
-  name: "kg",
-  dimension: { mass: 1 },
-  factor: new Decimal(1),
-}
-const gr: Unit = {
-  name: "gr",
-  dimension: { mass: 1 },
-  factor: new Decimal("0.001"),
-}
-const m: Unit = {
-  name: "m",
-  dimension: { length: 1 },
-  factor: new Decimal(1),
-}
-const s: Unit = {
-  name: "s",
-  dimension: { time: 1 },
-  factor: new Decimal(1),
-}
-const usd: Unit = {
-  name: "usd",
-  dimension: { currency: 1 },
-  factor: new Decimal(1),
-}
-const rub: Unit = {
-  name: "rub",
-  dimension: { currency: 1 },
-  factor: new Decimal(1).div(90.5),
-}
+const kg = makeNamedUnit("kg", { mass: 1 }, new Decimal(1))
+const gr = makeNamedUnit("gr", { mass: 1 }, new Decimal("0.001"))
+const m = makeNamedUnit("m", { length: 1 }, new Decimal(1))
+const s = makeNamedUnit("s", { time: 1 }, new Decimal(1))
+const usd = makeNamedUnit("usd", { currency: 1 }, new Decimal(1))
+const rub = makeNamedUnit("rub", { currency: 1 }, new Decimal(1).div(90.5))
 
 const dim = (v: number | string) => Q.dimensionless(v)
 const at = (v: number | string, u: Unit) => Q.ofUnit(v, u)
@@ -120,11 +96,7 @@ describe("mul", () => {
 
   test("dimensions cancel: result is dimensionless, factors fold into value", () => {
     // 2 gr * (1 / 1 kg) — must end up dimensionless, with 0.001 baked in
-    const inverseKg: Unit = {
-      name: "1/kg",
-      dimension: { mass: -1 },
-      factor: new Decimal(1), // 1/(base mass)
-    }
+    const inverseKg = makeNamedUnit("inverseKg", { mass: -1 }, new Decimal(1))
     const r = Q.mul(at(2, gr), at(1, inverseKg))
     expect(r.unit).toBeNull()
     // 2 gr in base = 0.002. 1 (1/kg) in base = 1. Product = 0.002.
