@@ -1,12 +1,12 @@
 # SERIES — собираем числа в группу и применяем агрегаты
 
 SERIES foo
-100
-20
-222
-500
--3909
-0
+100                                               // = 100
+20                                                // = 20
+222                                               // = 222
+500                                               // = 500
+-3909                                             // = -3 909
+0                                                 // = 0
 
 foo.count                                         // = 6
 foo.sum                                           // = -3 067
@@ -20,10 +20,10 @@ UNIT Currency usd
 UNIT (usd / 90,5) rub
 
 SERIES wallet
-100 rub
-5 usd
-2000 rub
-50 usd
+100 rub                                           // = 100 rub
+5 usd                                             // = 5 usd
+2000 rub                                          // = 2 000 rub
+50 usd                                            // = 50 usd
 
 wallet.sum                                        // = 7 077,5 rub
 wallet.avg                                        // = 1 769,375 rub

@@ -76,6 +76,7 @@ export function annotation(
   switch (r.stmt.type) {
     case "unitDecl":
     case "seriesDecl":
+    case "functionDecl":
       return null
     case "variableDecl":
     case "exprAssignment":
@@ -100,6 +101,7 @@ export function replLine(
   switch (r.stmt.type) {
     case "unitDecl":
     case "seriesDecl":
+    case "functionDecl":
       return null
     case "variableDecl":
     case "exprAssignment":

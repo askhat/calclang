@@ -61,18 +61,22 @@ describe("numbers", () => {
     expect(kinds("-10")).toEqual(["MINUS", "NUMBER", "EOF"])
   })
 
-  test("trailing decimal separator is NOT consumed", () => {
+  test("trailing comma becomes a COMMA token, not a stray", () => {
+    // Comma is a real token now (used by argument lists). A trailing ','
+    // after a number lexes as NUMBER COMMA — context decides if that's a
+    // syntax error, not the lexer.
     const { tokens, diagnostics } = tokenize("35,")
-    expect(tokens.map((t) => t.kind)).toEqual(["NUMBER", "EOF"])
+    expect(tokens.map((t) => t.kind)).toEqual(["NUMBER", "COMMA", "EOF"])
     expect(tokens[0]?.lexeme).toBe("35")
-    expect(diagnostics).toHaveLength(1)
-    expect(diagnostics[0]?.message).toContain("stray")
+    expect(diagnostics).toEqual([])
   })
 
-  test("comma in dot-locale gets a helpful diagnostic", () => {
-    const { diagnostics } = tokenize("35,5", { decimalSeparator: "." })
-    expect(diagnostics).toHaveLength(1)
-    expect(diagnostics[0]?.hint).toContain(".")
+  test("comma in dot-locale tokenizes as NUMBER COMMA NUMBER", () => {
+    // In dot-locale ',' isn't a decimal separator so '35,5' is two numbers
+    // separated by a comma. The parser will reject it in non-arg contexts.
+    const { tokens, diagnostics } = tokenize("35,5", { decimalSeparator: "." })
+    expect(diagnostics).toEqual([])
+    expect(tokens.map((t) => t.kind)).toEqual(["NUMBER", "COMMA", "NUMBER", "EOF"])
   })
 
   test("'.' in comma-locale tokenizes as DOT (property access)", () => {

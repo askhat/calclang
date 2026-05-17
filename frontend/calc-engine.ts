@@ -1,5 +1,9 @@
 import type { Diagnostic } from "../src/errors/diagnostic.ts"
-import { Evaluator, type RunResult } from "../src/eval/evaluator.ts"
+import {
+  Evaluator,
+  computeAggregate,
+  type RunResult,
+} from "../src/eval/evaluator.ts"
 import { isQuantity } from "../src/eval/value.ts"
 import { tokenize } from "../src/lexer/lexer.ts"
 import { parseProgram } from "../src/parser/parser.ts"
@@ -9,8 +13,16 @@ import type { Unit } from "../src/units/unit.ts"
 export type SeriesSummary = {
   name: string
   count: number
-  /** Same unit as `count.unit` for display (null = dimensionless). */
-  sumUnit: string | null
+  /** null when the series is empty (no members to aggregate). */
+  sum: Quantity | null
+  avg: Quantity | null
+  min: Quantity | null
+  max: Quantity | null
+}
+
+export type FunctionSummary = {
+  name: string
+  params: string[]
 }
 
 export type EngineRun = {
@@ -27,6 +39,8 @@ export type EngineRun = {
   units: Unit[]
   /** Ready series for sidebar. */
   series: SeriesSummary[]
+  /** Declared functions for sidebar. */
+  functions: FunctionSummary[]
 }
 
 /**
@@ -50,13 +64,33 @@ export function runPipeline(source: string): EngineRun {
     const units = [...ev.registry.all()]
 
     const series: SeriesSummary[] = []
+    const aggregatePos = { line: 0, col: 0 }
     for (const [name, value] of ev.readySeries()) {
-      const first = value.members[0]
+      const count = value.members.length
+      const aggregate = (
+        method: "sum" | "avg" | "min" | "max",
+      ): Quantity | null => {
+        if (count === 0) return null
+        try {
+          const v = computeAggregate(value, method, aggregatePos)
+          return isQuantity(v) ? v : null
+        } catch {
+          return null
+        }
+      }
       series.push({
         name,
-        count: value.members.length,
-        sumUnit: first?.unit?.name ?? null,
+        count,
+        sum: aggregate("sum"),
+        avg: aggregate("avg"),
+        min: aggregate("min"),
+        max: aggregate("max"),
       })
+    }
+
+    const functions: FunctionSummary[] = []
+    for (const fn of ev.functions()) {
+      functions.push({ name: fn.name, params: fn.params })
     }
 
     const allDiagnostics = dedupeAndSort([
@@ -75,6 +109,7 @@ export function runPipeline(source: string): EngineRun {
       variables,
       units,
       series,
+      functions,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -95,6 +130,7 @@ export function runPipeline(source: string): EngineRun {
       variables: [],
       units: [],
       series: [],
+      functions: [],
     }
   }
 }

@@ -1,0 +1,34 @@
+# Функции: FN <name>(<params>) <body>
+# Тело — одно выражение. Параметры в локальной области, перекрывают globals.
+
+FN double(x) x * 2
+FN avg2(a, b) (a + b) / 2
+FN circleArea(r) 3,14159265 * r ^ 2
+
+double(7)
+avg2(10, 30)
+circleArea(5)
+
+# С юнитами
+
+UNIT Mass kg
+UNIT Length m
+UNIT Time s
+
+FN kinetic(m, v) m * v ^ 2 / 2
+kinetic(70 kg, 10 m / s)
+
+# Рекурсия
+
+FN fact(n) if n < 2 then 1 else n * fact(n - 1)
+fact(5)
+
+# Можно дёрнуть агрегат серии из тела функции
+
+SERIES temps
+10
+20
+30
+
+FN scaled(k) temps.sum * k
+scaled(2)

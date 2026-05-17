@@ -4,12 +4,14 @@ import type { EngineRun } from "./calc-engine.ts"
 
 const VARS_ID = "vars-list"
 const SERIES_ID = "series-list"
+const FUNCTIONS_ID = "functions-list"
 const UNITS_ID = "units-list"
 const DIAGS_ID = "diagnostics-list"
 
 export function renderSidebar(run: EngineRun): void {
   renderVariables(run)
   renderSeries(run)
+  renderFunctions(run)
   renderUnits(run)
   renderDiagnostics(run)
 }
@@ -45,15 +47,60 @@ function renderSeries(run: EngineRun): void {
   }
   for (const s of run.series) {
     const li = document.createElement("li")
+    li.className = "series-item"
+    li.title = "use .sum / .avg / .count / .min / .max"
+
+    const head = document.createElement("div")
+    head.className = "series-head"
     const name = document.createElement("span")
     name.className = "kv-name"
     name.textContent = s.name
-    const meta = document.createElement("span")
-    meta.className = "kv-value"
-    const unit = s.sumUnit ? ` ${s.sumUnit}` : ""
-    meta.textContent = `${s.count}${unit}`
-    li.title = "use .sum / .avg / .count / .min / .max"
-    li.append(name, meta)
+    const count = document.createElement("span")
+    count.className = "kv-value"
+    count.textContent = `n=${s.count}`
+    head.append(name, count)
+    li.appendChild(head)
+
+    if (s.count > 0) {
+      const stats = document.createElement("dl")
+      stats.className = "series-stats"
+      for (const [label, value] of [
+        ["sum", s.sum],
+        ["avg", s.avg],
+        ["min", s.min],
+        ["max", s.max],
+      ] as const) {
+        const dt = document.createElement("dt")
+        dt.textContent = label
+        const dd = document.createElement("dd")
+        dd.textContent = value ? formatValue(value) : "—"
+        stats.append(dt, dd)
+      }
+      li.appendChild(stats)
+    }
+
+    list.appendChild(li)
+  }
+}
+
+function renderFunctions(run: EngineRun): void {
+  const list = document.getElementById(FUNCTIONS_ID)
+  if (!list) return
+  list.innerHTML = ""
+  if (run.functions.length === 0) {
+    list.appendChild(emptyItem("(none yet)"))
+    return
+  }
+  for (const f of run.functions) {
+    const li = document.createElement("li")
+    const name = document.createElement("span")
+    name.className = "kv-name"
+    name.textContent = f.name
+    const sig = document.createElement("span")
+    sig.className = "kv-value"
+    sig.textContent = `(${f.params.join(", ")})`
+    li.title = `call as ${f.name}(${f.params.join(", ")})`
+    li.append(name, sig)
     list.appendChild(li)
   }
 }

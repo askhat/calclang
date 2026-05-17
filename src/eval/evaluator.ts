@@ -4,6 +4,7 @@ import type {
   BinaryOp,
   Expr,
   ExprAssignment,
+  FunctionDecl,
   Position,
   Program,
   SeriesDecl,
@@ -31,7 +32,7 @@ type VarBinding =
   | { state: "resolving" }
   | { state: "ready"; value: Value }
 
-type SeriesValue = {
+export type SeriesValue = {
   /** Evaluated members in source order. All share `dimension`. */
   members: Quantity[]
   /** Unified dimension vector for the members (`{}` for dimensionless). */
@@ -76,6 +77,9 @@ export class Evaluator {
   readonly diagnostics: Diagnostic[] = []
   private readonly varEnv = new Map<string, VarBinding>()
   private readonly seriesEnv = new Map<string, SeriesBinding>()
+  private readonly functionEnv = new Map<string, FunctionDecl>()
+  /** Stack of local scopes pushed by active function calls. */
+  private readonly localScopes: Array<Map<string, Value>> = []
   private readonly pendingUnits = new Map<string, UnitDecl>()
   private readonly resolvingStack: string[] = []
 
@@ -87,7 +91,30 @@ export class Evaluator {
    */
   feed(program: Program): RunResult[] {
     this.collect(program)
-    return program.statements.map((s) => this.runStatement(s))
+    const out: RunResult[] = []
+    for (const stmt of program.statements) {
+      out.push(this.runStatement(stmt))
+      if (stmt.type === "seriesDecl") {
+        const binding = this.seriesEnv.get(stmt.name)
+        if (binding?.state === "ready") {
+          // Publish each member's value as a synthetic expr-statement result
+          // so the editor can render `= value` next to each member line.
+          for (let i = 0; i < stmt.members.length; i++) {
+            const memberExpr = stmt.members[i]!
+            out.push({
+              stmt: {
+                type: "exprStatement",
+                expr: memberExpr,
+                pos: memberExpr.pos,
+              },
+              value: binding.value.members[i]!,
+              error: null,
+            })
+          }
+        }
+      }
+    }
+    return out
   }
 
   /** Ready variable bindings, for REPL inspection. */
@@ -168,8 +195,36 @@ export class Evaluator {
           }
           this.seriesEnv.set(stmt.name, { state: "pending", decl: stmt })
           break
+        case "functionDecl":
+          if (this.functionEnv.has(stmt.name)) {
+            this.report(
+              `function '${stmt.name}' is already declared`,
+              stmt.pos,
+              "each function may be declared only once",
+            )
+            continue
+          }
+          if (
+            this.varEnv.has(stmt.name) ||
+            this.pendingUnits.has(stmt.name) ||
+            this.seriesEnv.has(stmt.name)
+          ) {
+            this.report(
+              `name '${stmt.name}' is already declared`,
+              stmt.pos,
+              "the name must be unique across units, variables, series, and functions",
+            )
+            continue
+          }
+          this.functionEnv.set(stmt.name, stmt)
+          break
       }
     }
+  }
+
+  /** Declared functions, for sidebar / debug introspection. */
+  *functions(): IterableIterator<FunctionDecl> {
+    yield* this.functionEnv.values()
   }
 
   /** Ready series, for sidebar / debug introspection. */
@@ -212,6 +267,10 @@ export class Evaluator {
           this.resolveSeries(stmt.name, stmt.pos)
           return { stmt, value: null, error: null }
         }
+        case "functionDecl":
+          // Function definitions are registered in pass 1; nothing to
+          // compute at "run" time — they're templates evaluated per call.
+          return { stmt, value: null, error: null }
       }
     } catch (err) {
       const evalErr = EvalError.from(err, stmt.pos)
@@ -353,9 +412,12 @@ export class Evaluator {
         return { value: expr.value, unit: null }
       }
       case "ident": {
-        // Units take precedence over variables — name conflicts are caught
-        // at collection time, so this is only a question of namespace order
-        // when there's no conflict.
+        // Local scopes (function parameters) win over globals so a function
+        // body's `m` refers to the param, not the `m` unit.
+        for (let i = this.localScopes.length - 1; i >= 0; i--) {
+          const scope = this.localScopes[i]!
+          if (scope.has(expr.name)) return scope.get(expr.name)!
+        }
         if (this.registry.has(expr.name) || this.pendingUnits.has(expr.name)) {
           const unit = this.resolveUnit(expr.name, expr.pos)
           return { value: new Decimal(1), unit }
@@ -370,9 +432,16 @@ export class Evaluator {
             "available methods: sum, avg, count, min, max",
           )
         }
+        if (this.functionEnv.has(expr.name)) {
+          throw new EvalError(
+            `'${expr.name}' is a function — call it with arguments, e.g. '${expr.name}(…)'`,
+            expr.pos,
+          )
+        }
         const allNames = new Set<string>(this.allUnitNames())
         for (const n of this.varEnv.keys()) allNames.add(n)
         for (const n of this.seriesEnv.keys()) allNames.add(n)
+        for (const n of this.functionEnv.keys()) allNames.add(n)
         throw new EvalError(
           `undefined name '${expr.name}'`,
           expr.pos,
@@ -436,6 +505,54 @@ export class Evaluator {
         }
         const series = this.resolveSeries(expr.target.name, expr.target.pos)
         return computeAggregate(series, expr.property, expr.pos)
+      }
+      case "call": {
+        const fn = this.functionEnv.get(expr.callee)
+        if (!fn) {
+          // Better hints than "undefined": surface units/vars/series too.
+          if (this.varEnv.has(expr.callee)) {
+            throw new EvalError(
+              `'${expr.callee}' is a variable, not a function`,
+              expr.pos,
+            )
+          }
+          if (this.seriesEnv.has(expr.callee)) {
+            throw new EvalError(
+              `'${expr.callee}' is a series — use '${expr.callee}.sum' / '${expr.callee}.avg' (not call syntax)`,
+              expr.pos,
+            )
+          }
+          if (this.registry.has(expr.callee) || this.pendingUnits.has(expr.callee)) {
+            throw new EvalError(
+              `'${expr.callee}' is a unit, not a function`,
+              expr.pos,
+            )
+          }
+          throw new EvalError(
+            `undefined function '${expr.callee}'`,
+            expr.pos,
+            this.didYouMean(expr.callee, this.functionEnv.keys()),
+          )
+        }
+        if (expr.args.length !== fn.params.length) {
+          throw new EvalError(
+            `function '${fn.name}' expects ${fn.params.length} argument${fn.params.length === 1 ? "" : "s"}, got ${expr.args.length}`,
+            expr.pos,
+          )
+        }
+        // Evaluate args in caller's scope, then push a local scope binding
+        // params to those values.
+        const argValues = expr.args.map((a) => this.evalExpr(a))
+        const scope = new Map<string, Value>()
+        for (let i = 0; i < fn.params.length; i++) {
+          scope.set(fn.params[i]!, argValues[i]!)
+        }
+        this.localScopes.push(scope)
+        try {
+          return this.evalExpr(fn.body)
+        } finally {
+          this.localScopes.pop()
+        }
       }
     }
   }
@@ -555,7 +672,7 @@ export function evaluateProgram(program: Program): EvalResult {
 
 const AGGREGATE_METHODS = new Set(["sum", "avg", "count", "min", "max"])
 
-function computeAggregate(
+export function computeAggregate(
   series: SeriesValue,
   method: string,
   pos: Position,

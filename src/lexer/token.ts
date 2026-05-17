@@ -5,6 +5,7 @@ export type TokenKind =
   // keywords
   | "UNIT"
   | "SERIES"
+  | "FN"
   | "AS"
   | "IF"
   | "THEN"
@@ -28,6 +29,7 @@ export type TokenKind =
   | "QUESTION"
   | "COLON"
   | "DOT"
+  | "COMMA"
   | "LPAREN"
   | "RPAREN"
   // structural
@@ -56,6 +58,7 @@ export type Token = {
 export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
   UNIT: "UNIT",
   SERIES: "SERIES",
+  FN: "FN",
   as: "AS",
   if: "IF",
   then: "THEN",

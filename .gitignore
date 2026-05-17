@@ -8,3 +8,4 @@ bun.lockb
 !.vscode/extensions.json
 .idea/
 .claude/settings.local.json
+.claude/launch.json

@@ -84,6 +84,7 @@ function formatResultText(r: RunResult): string | null {
   switch (r.stmt.type) {
     case "unitDecl":
     case "seriesDecl":
+    case "functionDecl":
       return null
     case "variableDecl":
     case "exprAssignment":

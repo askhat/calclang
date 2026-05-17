@@ -194,6 +194,45 @@ aside {
   color: var(--err);
 }
 
+.kv-list li.series-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+
+.series-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.series-head .kv-value {
+  color: var(--text-dim);
+}
+
+.series-stats {
+  margin: 0;
+  padding-left: 0.75rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.1rem 0.75rem;
+}
+
+.series-stats dt {
+  color: var(--text-mute);
+  font-size: 0.75rem;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
+
+.series-stats dd {
+  margin: 0;
+  color: var(--result-fg);
+  text-align: right;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
 /* Files panel */
 .panel-head {
   display: flex;

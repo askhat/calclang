@@ -6,11 +6,12 @@ import {
 } from "@codemirror/language"
 import { tags as t } from "@lezer/highlight"
 
-// 'UNIT' and 'SERIES' are case-sensitive uppercase keywords. The rest are
-// lowercase. Lowercase 'unit' / 'series' are plain identifiers.
+// 'UNIT', 'SERIES', 'FN' are case-sensitive uppercase keywords. The rest
+// are lowercase. Lowercase 'unit' / 'series' / 'fn' are plain identifiers.
 const KEYWORDS = new Set([
   "UNIT",
   "SERIES",
+  "FN",
   "as",
   "if",
   "then",

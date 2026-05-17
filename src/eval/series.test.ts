@@ -221,3 +221,49 @@ describe("SERIES with referenced variables", () => {
     expect(lastValue(results)).toBe("20")
   })
 })
+
+describe("SERIES — per-member results published for editor rendering", () => {
+  test("each member yields a result keyed to its source line", () => {
+    const src = ["SERIES foo", "100", "1 + 2", "-5"].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    // 1 seriesDecl + 3 synthetic member results.
+    expect(results).toHaveLength(4)
+
+    // Lines are 1 (SERIES foo), 2 (100), 3 (1 + 2), 4 (-5).
+    expect(results[0]!.stmt.type).toBe("seriesDecl")
+    expect(results[0]!.stmt.pos.line).toBe(1)
+    expect(results[0]!.value).toBeNull()
+
+    const memberResults = results.slice(1)
+    expect(memberResults.map((r) => r.stmt.pos.line)).toEqual([2, 3, 4])
+    expect(memberResults.map(lastValueOf)).toEqual(["100", "3", "-5"])
+  })
+
+  test("failed series (dimension mismatch) emits no member results", () => {
+    const src = [
+      "UNIT Currency usd",
+      "UNIT Mass kg",
+      "SERIES mixed",
+      "10 usd",
+      "5 kg",
+    ].join("\n")
+    const { results } = run(src)
+    // Two UNIT decls + one seriesDecl (with no member results because
+    // resolveSeries threw partway through and the binding stayed pending).
+    expect(results).toHaveLength(3)
+    expect(results[2]!.stmt.type).toBe("seriesDecl")
+  })
+})
+
+function lastValueOf(r: RunResult): string {
+  if (r.error) return `<error: ${r.error.message}>`
+  if (r.value === null) return "<null>"
+  if (typeof r.value === "boolean") return String(r.value)
+  if (isQuantity(r.value)) {
+    return r.value.unit
+      ? `${r.value.value.toString()} ${r.value.unit.name}`
+      : r.value.value.toString()
+  }
+  return "<unknown>"
+}

@@ -6,6 +6,7 @@ import type {
   Expr,
   ExprAssignment,
   ExprStatement,
+  FunctionDecl,
   Position,
   Program,
   SeriesDecl,
@@ -127,7 +128,8 @@ class Parser {
         after === "NEWLINE" ||
         after === "EOF" ||
         after === "UNIT" ||
-        after === "SERIES"
+        after === "SERIES" ||
+        after === "FN"
       if (!atBoundary) {
         if (stmt) {
           this.diagnose(
@@ -146,8 +148,41 @@ class Parser {
     const t = this.peek()
     if (t.kind === "UNIT") return this.parseDeclaration()
     if (t.kind === "SERIES") return this.parseSeriesDecl()
+    if (t.kind === "FN") return this.parseFunctionDecl()
     if (this.isVariableDeclStart()) return this.parseVariableDecl()
     return this.parseExpressionOrAssignment()
+  }
+
+  private parseFunctionDecl(): FunctionDecl | null {
+    const fnTok = this.advance() // 'FN'
+    const nameTok = this.expect("IDENT")
+    if (!nameTok) return null
+    if (!this.expect("LPAREN")) return null
+
+    const params: string[] = []
+    if (this.peek().kind !== "RPAREN") {
+      const first = this.expect("IDENT")
+      if (!first) return null
+      params.push(first.lexeme)
+      while (this.peek().kind === "COMMA") {
+        this.advance()
+        const p = this.expect("IDENT")
+        if (!p) return null
+        params.push(p.lexeme)
+      }
+    }
+    if (!this.expect("RPAREN")) return null
+
+    const body = this.parseExpressionRule()
+    if (!body) return null
+
+    return {
+      type: "functionDecl",
+      name: nameTok.lexeme,
+      params,
+      body,
+      pos: pos(fnTok),
+    }
   }
 
   private parseSeriesDecl(): SeriesDecl | null {
@@ -161,7 +196,13 @@ class Parser {
     while (true) {
       const k = this.peek().kind
       // Blank line / EOF / next top-level keyword → end of series.
-      if (k === "NEWLINE" || k === "EOF" || k === "UNIT" || k === "SERIES") break
+      if (
+        k === "NEWLINE" ||
+        k === "EOF" ||
+        k === "UNIT" ||
+        k === "SERIES" ||
+        k === "FN"
+      ) break
 
       const expr = this.parseExpressionRule()
       if (!expr) {
@@ -533,9 +574,33 @@ class Parser {
           pos: pos(t),
         }
       }
-      case "IDENT":
+      case "IDENT": {
         this.advance()
+        // IDENT immediately followed by '(' is a function call. There's no
+        // implicit multiplication in the grammar, so the only meaning of
+        // `name(...)` is application.
+        if (this.peek().kind === "LPAREN") {
+          this.advance()
+          const args: Expr[] = []
+          this.skipNewlines()
+          if (this.peek().kind !== "RPAREN") {
+            const first = this.parseExpressionRule()
+            if (!first) return null
+            args.push(first)
+            while (this.peek().kind === "COMMA") {
+              this.advance()
+              this.skipNewlines()
+              const a = this.parseExpressionRule()
+              if (!a) return null
+              args.push(a)
+            }
+          }
+          this.skipNewlines()
+          if (!this.expect("RPAREN")) return null
+          return { type: "call", callee: t.lexeme, args, pos: pos(t) }
+        }
         return { type: "ident", name: t.lexeme, pos: pos(t) }
+      }
       case "LPAREN": {
         this.advance()
         this.skipNewlines()

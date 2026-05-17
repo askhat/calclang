@@ -23,10 +23,12 @@ const SINGLE_CHAR: Readonly<Record<string, TokenKind>> = {
   "?": "QUESTION",
   ":": "COLON",
   ".": "DOT",
+  ",": "COMMA",
 }
-// Note on DOT in dot-locale: number() consumes a digit-adjacent '.' as a
-// decimal separator before we get here, so by the time scanToken reaches
-// the single-char table, '.' is unambiguously a property-access token.
+// Note on DOT/COMMA when they collide with a locale's decimal separator:
+// number() consumes a digit-adjacent '.' or ',' first, so by the time
+// scanToken reaches the single-char table the punctuation is unambiguously
+// the structural token (DOT for property access, COMMA for arg lists).
 
 class Lexer {
   private pos = 0
@@ -180,28 +182,8 @@ class Lexer {
   }
 
   private diagnoseStray(c: string, line: number, col: number): void {
-    const decimal = this.config.decimalSeparator
-    // ',' is never a real token: either it's inside a number (handled by
-    // number()) or it's stray. '.' has its own DOT token (SINGLE_CHAR) so
-    // we shouldn't see it here.
-    if (c === ",") {
-      if (decimal === ",") {
-        this.diagnostic(
-          `stray ','`,
-          line,
-          col,
-          `decimal separator must be inside a number, e.g. '35,5'`,
-        )
-      } else {
-        this.diagnostic(
-          `unexpected ',', the decimal separator in this file is '.'`,
-          line,
-          col,
-          `try '.' (e.g. '35.5')`,
-        )
-      }
-      return
-    }
+    // Both '.' and ',' are real tokens now (DOT / COMMA), handled by
+    // SINGLE_CHAR. Anything that lands here is genuinely unknown.
     this.diagnostic(`unexpected character ${JSON.stringify(c)}`, line, col)
   }
 

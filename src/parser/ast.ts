@@ -37,6 +37,7 @@ export type Expr =
   | IfExpr
   | ConversionExpr
   | PropertyAccess
+  | FunctionCall
 
 export type NumberLit = {
   type: "number"
@@ -111,6 +112,18 @@ export type PropertyAccess = {
   pos: Position
 }
 
+/**
+ * `callee(arg1, arg2, …)` — function application. The callee is parsed as
+ * a bare identifier (the FN's name) for now; first-class functions would
+ * promote this to `Expr` later.
+ */
+export type FunctionCall = {
+  type: "call"
+  callee: string
+  args: Expr[]
+  pos: Position
+}
+
 // -- Statements --
 
 /**
@@ -169,12 +182,26 @@ export type SeriesDecl = {
   pos: Position
 }
 
+/**
+ * `FN <name>(<params>) <body>` — a function with a single-expression body.
+ * Parameters are evaluated at call sites; the body sees them in a local
+ * scope that shadows globals.
+ */
+export type FunctionDecl = {
+  type: "functionDecl"
+  name: string
+  params: string[]
+  body: Expr
+  pos: Position
+}
+
 export type Statement =
   | UnitDecl
   | VariableDecl
   | ExprAssignment
   | ExprStatement
   | SeriesDecl
+  | FunctionDecl
 
 export type Program = {
   statements: Statement[]
@@ -200,6 +227,10 @@ export function showExpr(e: Expr): string {
       return `(as ${showExpr(e.expr)} ${showUnitExpr(e.unit)})`
     case "property":
       return `(prop ${showExpr(e.target)} ${e.property})`
+    case "call": {
+      const args = e.args.map(showExpr).join(" ")
+      return `(call ${e.callee}${args ? " " + args : ""})`
+    }
   }
 }
 
@@ -229,6 +260,10 @@ export function showStatement(s: Statement): string {
     case "seriesDecl": {
       const ms = s.members.map(showExpr).join(" ")
       return `(series ${s.name}${ms ? " " + ms : ""})`
+    }
+    case "functionDecl": {
+      const ps = s.params.length ? ` (${s.params.join(" ")})` : " ()"
+      return `(fn ${s.name}${ps} ${showExpr(s.body)})`
     }
   }
 }
