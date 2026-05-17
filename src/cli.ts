@@ -1,4 +1,6 @@
 import { formatDiagnostic, type Diagnostic } from "./errors/diagnostic.ts"
+import { evaluateProgram } from "./eval/evaluator.ts"
+import { annotateSource } from "./format/output.ts"
 import { tokenize } from "./lexer/lexer.ts"
 import type { Token } from "./lexer/token.ts"
 import { showProgram } from "./parser/ast.ts"
@@ -30,7 +32,7 @@ export async function runFile(
     return
   }
 
-  process.stdout.write(source)
+  evalAndPrint(source, path)
 }
 
 function dumpTokens(source: string, path: string): void {
@@ -39,6 +41,7 @@ function dumpTokens(source: string, path: string): void {
     console.log(formatToken(t))
   }
   reportDiagnostics(diagnostics, path)
+  if (diagnostics.length > 0) process.exit(1)
 }
 
 function dumpAst(source: string, path: string): void {
@@ -50,7 +53,33 @@ function dumpAst(source: string, path: string): void {
   if (lexErrors.length + parseErrors.length > 0) process.exit(1)
 }
 
-function reportDiagnostics(diagnostics: readonly Diagnostic[], path: string): void {
+function evalAndPrint(source: string, path: string): void {
+  const { tokens, diagnostics: lexErrors } = tokenize(source)
+  const { program, diagnostics: parseErrors } = parseProgram(tokens)
+  const { results, diagnostics: evalErrors } = evaluateProgram(program)
+
+  // Print the annotated source — line annotations are how the user reads
+  // both successes and per-line errors.
+  process.stdout.write(annotateSource(source, results))
+  if (!source.endsWith("\n")) process.stdout.write("\n")
+
+  // Lex and parse errors don't have per-line annotations; show them in a
+  // trailing block. Eval errors are already inline in the annotation.
+  const beforeEval = [...lexErrors, ...parseErrors]
+  if (beforeEval.length > 0) {
+    process.stderr.write("\n")
+    reportDiagnostics(beforeEval, path)
+  }
+
+  if (lexErrors.length + parseErrors.length + evalErrors.length > 0) {
+    process.exit(1)
+  }
+}
+
+function reportDiagnostics(
+  diagnostics: readonly Diagnostic[],
+  path: string,
+): void {
   for (const d of diagnostics) {
     console.error(formatDiagnostic(d, path))
   }
