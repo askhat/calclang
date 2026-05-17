@@ -6,10 +6,13 @@ import { evaluateProgram } from "../eval/evaluator.ts"
 import {
   annotateSource,
   formatDecimal,
+  formatDiagnosticColored,
   formatQuantity,
   formatValue,
+  replLine,
 } from "./output.ts"
 import type { Unit } from "../units/unit.ts"
+import type { RunResult } from "../eval/evaluator.ts"
 
 const kg: Unit = {
   name: "kg",
@@ -18,26 +21,50 @@ const kg: Unit = {
 }
 
 describe("formatDecimal", () => {
-  test("default locale uses comma", () => {
+  test("default locale uses comma + space thousands", () => {
     expect(formatDecimal(new Decimal("3.14159265358979"))).toBe("3,141593")
   })
 
-  test("dot locale uses dot", () => {
+  test("dot locale + comma thousands", () => {
     expect(
-      formatDecimal(new Decimal("3.14"), { decimalSeparator: "." }),
-    ).toBe("3.14")
+      formatDecimal(new Decimal("1234567.89"), {
+        decimalSeparator: ".",
+        thousandsSeparator: ",",
+      }),
+    ).toBe("1,234,567.89")
   })
 
   test("trims to 6 places (rounded)", () => {
     expect(formatDecimal(new Decimal("1.1234567"))).toBe("1,123457")
   })
 
-  test("integer renders without separator", () => {
-    expect(formatDecimal(new Decimal(42))).toBe("42")
+  test("integer with thousands separator (default = space)", () => {
+    expect(formatDecimal(new Decimal(1234567))).toBe("1 234 567")
   })
 
-  test("negative", () => {
-    expect(formatDecimal(new Decimal("-10.5"))).toBe("-10,5")
+  test("disabling thousands separator", () => {
+    expect(
+      formatDecimal(new Decimal(1234567), {
+        decimalSeparator: ",",
+        thousandsSeparator: "",
+      }),
+    ).toBe("1234567")
+  })
+
+  test("decimal with thousands separator on the integer part only", () => {
+    expect(formatDecimal(new Decimal("1234567.89"))).toBe("1 234 567,89")
+  })
+
+  test("negative with thousands", () => {
+    expect(formatDecimal(new Decimal("-12345.67"))).toBe("-12 345,67")
+  })
+
+  test("3-digit numbers don't get a leading separator", () => {
+    expect(formatDecimal(new Decimal(999))).toBe("999")
+  })
+
+  test("4 digits get one separator", () => {
+    expect(formatDecimal(new Decimal(1000))).toBe("1 000")
   })
 })
 
@@ -116,5 +143,61 @@ describe("annotateSource (end-to-end)", () => {
     const out = evalAndAnnotate("undeclared + 1")
     expect(out).toContain("// error:")
     expect(out).toContain("undefined name 'undeclared'")
+  })
+})
+
+describe("replLine", () => {
+  function evalOne(src: string): RunResult {
+    const { tokens } = tokenize(src)
+    const { program } = parseProgram(tokens)
+    const { results } = evaluateProgram(program)
+    return results[0]!
+  }
+
+  test("bare expression: '= value'", () => {
+    expect(replLine(evalOne("1 + 2"))).toBe("= 3")
+  })
+
+  test("variable declaration: '= value'", () => {
+    expect(replLine(evalOne("42 answer"))).toBe("= 42")
+  })
+
+  test("unit declaration: no line", () => {
+    expect(replLine(evalOne("declare kg base mass"))).toBeNull()
+  })
+
+  test("error: 'error: ...'", () => {
+    const r = evalOne("undefined + 1")
+    expect(replLine(r)).toContain("error:")
+    expect(replLine(r)).toContain("undefined name")
+  })
+})
+
+describe("formatDiagnosticColored", () => {
+  // Color codes are stripped in test environment (no TTY), so we check
+  // the textual content directly.
+  test("includes location, severity, and message", () => {
+    const out = formatDiagnosticColored(
+      { severity: "error", message: "boom", line: 3, col: 7 },
+      "foo.calc",
+    )
+    expect(out).toContain("foo.calc:3:7:")
+    expect(out).toContain("error:")
+    expect(out).toContain("boom")
+  })
+
+  test("includes hint when present", () => {
+    const out = formatDiagnosticColored(
+      {
+        severity: "error",
+        message: "bad",
+        line: 1,
+        col: 1,
+        hint: "do better",
+      },
+      "x.calc",
+    )
+    expect(out).toContain("hint:")
+    expect(out).toContain("do better")
   })
 })

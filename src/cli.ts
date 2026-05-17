@@ -1,6 +1,6 @@
-import { formatDiagnostic, type Diagnostic } from "./errors/diagnostic.ts"
+import type { Diagnostic } from "./errors/diagnostic.ts"
 import { evaluateProgram } from "./eval/evaluator.ts"
-import { annotateSource } from "./format/output.ts"
+import { annotateSource, formatDiagnosticColored } from "./format/output.ts"
 import { tokenize } from "./lexer/lexer.ts"
 import type { Token } from "./lexer/token.ts"
 import { showProgram } from "./parser/ast.ts"
@@ -81,7 +81,7 @@ function reportDiagnostics(
   path: string,
 ): void {
   for (const d of diagnostics) {
-    console.error(formatDiagnostic(d, path))
+    console.error(formatDiagnosticColored(d, path))
   }
 }
 

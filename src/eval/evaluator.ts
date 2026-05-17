@@ -62,8 +62,30 @@ export class Evaluator {
   private readonly pendingUnits = new Map<string, UnitDecl>()
   private readonly resolvingStack: string[] = []
 
-  constructor(private readonly program: Program) {
+  /**
+   * Feeds a (possibly partial) program: collects new declarations into
+   * pending pools and runs each statement in source order. The internal
+   * state accumulates across calls, so the REPL can call this once per
+   * input line and the file driver calls it once with the whole program.
+   */
+  feed(program: Program): RunResult[] {
     this.collect(program)
+    return program.statements.map((s) => this.runStatement(s))
+  }
+
+  /** Ready variable bindings, for REPL inspection. */
+  *readyVariables(): IterableIterator<[string, Value]> {
+    for (const [name, b] of this.varEnv) {
+      if (b.state === "ready") yield [name, b.value]
+    }
+  }
+
+  /** All known unit names (registered + pending) — for parser seeding in the REPL. */
+  unitNames(): Set<string> {
+    const names = new Set<string>()
+    for (const u of this.registry.all()) names.add(u.name)
+    for (const name of this.pendingUnits.keys()) names.add(name)
+    return names
   }
 
   // -- Pass 1: collect declarations into pending pools; report conflicts --
@@ -115,10 +137,6 @@ export class Evaluator {
   }
 
   // -- Pass 2: drive each statement in source order --
-
-  run(): RunResult[] {
-    return this.program.statements.map((s) => this.runStatement(s))
-  }
 
   private runStatement(stmt: Statement): RunResult {
     try {
@@ -368,7 +386,7 @@ export class Evaluator {
 }
 
 export function evaluateProgram(program: Program): EvalResult {
-  const ev = new Evaluator(program)
-  const results = ev.run()
+  const ev = new Evaluator()
+  const results = ev.feed(program)
   return { results, diagnostics: ev.diagnostics, registry: ev.registry }
 }

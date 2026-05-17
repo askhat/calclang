@@ -595,8 +595,17 @@ export function parseExpression(
   return { expr, diagnostics: p.diagnostics }
 }
 
-export function parseProgram(tokens: readonly Token[]): ProgramResult {
-  const unitNames = collectUnitNames(tokens)
+export function parseProgram(
+  tokens: readonly Token[],
+  seedUnitNames?: ReadonlySet<string>,
+): ProgramResult {
+  // Names from this chunk + any names the caller already knows about
+  // (used by the REPL so units declared on earlier lines aren't
+  // diagnosed as 'unknown' on later ones).
+  const fromChunk = collectUnitNames(tokens)
+  const unitNames = seedUnitNames
+    ? new Set([...seedUnitNames, ...fromChunk])
+    : fromChunk
   const p = new Parser(tokens, unitNames)
   const program = p.parseProgram()
   return { program, diagnostics: p.diagnostics }
