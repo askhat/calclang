@@ -194,6 +194,101 @@ aside {
   color: var(--err);
 }
 
+/* Files panel */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.icon-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.files-list .file-item {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  gap: 0.5rem;
+}
+
+.files-list .file-item:hover {
+  background: var(--bg-elev-2);
+}
+
+.files-list .file-item.active {
+  background: var(--bg-elev-2);
+  border-left: 2px solid var(--accent);
+  padding-left: calc(0.5rem - 2px);
+}
+
+.files-list .file-item.active .file-name {
+  color: var(--text);
+}
+
+.files-list .file-name {
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.files-list .file-actions {
+  display: flex;
+  gap: 0.2rem;
+  opacity: 0;
+  transition: opacity 80ms;
+}
+
+.files-list .file-item:hover .file-actions,
+.files-list .file-item:focus-within .file-actions {
+  opacity: 1;
+}
+
+.files-list .icon-btn {
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+}
+
+.files-list .file-rename-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0.1rem 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .diag-item {
   display: flex !important;
   flex-direction: column;
@@ -401,6 +496,11 @@ dialog form {
 .toast.toast-success {
   border-color: var(--ok);
   color: var(--ok);
+}
+
+.toast.toast-error {
+  border-color: var(--err);
+  color: var(--err);
 }
 
 @keyframes toast-in {

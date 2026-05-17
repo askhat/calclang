@@ -27,21 +27,3 @@ export function shareLink(source: string): string {
   const base = `${window.location.origin}${window.location.pathname}`
   return `${base}${encodeSourceToHash(source)}`
 }
-
-const STORAGE_KEY = "calc.draft"
-
-export function loadDraft(): string | null {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-export function saveDraft(source: string): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, source)
-  } catch {
-    // Quota exceeded or storage disabled — silently no-op.
-  }
-}
