@@ -7,7 +7,7 @@ import {
 import { tags as t } from "@lezer/highlight"
 
 const KEYWORDS = new Set([
-  "declare",
+  "unit",
   "base",
   "as",
   "if",

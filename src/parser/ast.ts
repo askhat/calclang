@@ -175,7 +175,7 @@ export function showUnitExpr(u: UnitExpr): string {
 export function showStatement(s: Statement): string {
   switch (s.type) {
     case "unitDecl":
-      return `(declare ${s.name} ${showUnitDef(s.def)})`
+      return `(unit ${s.name} ${showUnitDef(s.def)})`
     case "variableDecl": {
       const u = s.unit ? ` ${showUnitExpr(s.unit)}` : ""
       return `(var ${s.name} ${s.value.toString()}${u})`

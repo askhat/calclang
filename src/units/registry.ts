@@ -6,7 +6,7 @@ import { makeNamedUnit, type Unit } from "./unit.ts"
 export class UnitRegistry {
   private readonly byName = new Map<string, Unit>()
 
-  /** declare X base DIM — fresh dimension with unit factor 1. */
+  /** unit X base DIM — fresh dimension with unit factor 1. */
   registerBase(name: string, dimension: string): Unit {
     return this.add(
       makeNamedUnit(name, { [dimension]: 1 }, new Decimal(1)),
@@ -14,7 +14,7 @@ export class UnitRegistry {
   }
 
   /**
-   * declare X DIM — placeholder for dynamic-rate units (currencies that
+   * unit X DIM — placeholder for dynamic-rate units (currencies that
    * would consult an FX provider). In MVP this is identical to base; the
    * interface is in place so a future stage can attach a rate source.
    */
@@ -25,7 +25,7 @@ export class UnitRegistry {
   }
 
   /**
-   * declare X (expr) — the expression was already evaluated by the caller
+   * unit X (expr) — the expression was already evaluated by the caller
    * to produce `value`. The factor of the new unit is `value.value *
    * value.unit.factor` (i.e. how many base units one of X is worth).
    */
@@ -33,7 +33,7 @@ export class UnitRegistry {
     if (!value.unit) {
       throw new UnitError(
         `cannot derive unit '${name}' from a dimensionless value`,
-        `the body of 'declare ${name} (...)' must reference at least one declared unit`,
+        `the body of 'unit ${name} (...)' must reference at least one declared unit`,
       )
     }
     return this.add(

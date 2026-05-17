@@ -6,9 +6,9 @@ real dimensional type system on top — `kg + rub` is a compile-time error, not
 a silent string concat.
 
 ```calc
-declare usd base currency
-declare rub (usd / 90,5)
-declare kg base mass
+unit usd base currency
+unit rub (usd / 90,5)
+unit kg base mass
 
 35,5 rub salary
 70 kg weight
@@ -42,9 +42,9 @@ four kinds of statement and one kind of directive-comment.
 **Unit declarations.** Three forms — base, composite, and alias.
 
 ```calc
-declare kg base mass                # base unit of a new dimension
-declare gr (kg / 1_000)             # composite — 1 gr = 0.001 kg
-declare kzt currency                # alias — placeholder for dynamic FX (MVP: factor 1)
+unit kg base mass                # base unit of a new dimension
+unit gr (kg / 1_000)             # composite — 1 gr = 0.001 kg
+unit kzt currency                # alias — placeholder for dynamic FX (MVP: factor 1)
 ```
 
 **Variable declarations.** `[+|-]? NUMBER [unit_expr] IDENT`. The trailing
@@ -127,7 +127,7 @@ purely structural — fixed-distance lookahead, no backtracking.
 
 - `# locale en-US` and `# precision N` directives (scaffolding in place but
   not wired).
-- Live FX rates for `declare X currency` aliases.
+- Live FX rates for `unit X currency` aliases.
 - User-defined functions, loops, recursion.
 - Running-total syntax (`+ 50` on its own line).
 - Multi-line REPL input.
@@ -142,7 +142,7 @@ the language take shape:
 stage 0  scaffold              Bun + TS + decimal.js
 stage 1  lexer                 locale-aware, collected diagnostics
 stage 2  expression parser     recursive descent + Pratt
-stage 3  declare + variables   two-pass, NUMBER-WORD disambiguation
+stage 3  declarations          unit + variable decls, two-pass NUMBER-WORD disambiguation
 stage 4  units & quantities    DimensionVector + Quantity arithmetic
 stage 5  evaluator              lazy env + Soulver-style annotated output
 stage 6  REPL                   persistent env, colored diagnostics

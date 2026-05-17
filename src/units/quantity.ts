@@ -66,7 +66,7 @@ function additive(a: Quantity, b: Quantity, kind: "add" | "sub"): Quantity {
     const op = kind === "add" ? "+" : "-"
     throw new UnitError(
       `cannot ${op === "+" ? "add" : "subtract"} ${a.unit.name} (${Dim.format(a.unit.dimension)}) and ${b.unit.name} (${Dim.format(b.unit.dimension)})`,
-      `operands must share a dimension; convert with 'as' or check the declares`,
+      `operands must share a dimension; convert with 'as' or check the unit declarations`,
     )
   }
   const aInB = a.value.times(a.unit.factor).div(b.unit.factor)
@@ -189,7 +189,7 @@ export function convert(q: Quantity, target: Unit): Quantity {
   if (!q.unit) {
     throw new UnitError(
       `cannot convert dimensionless value to ${target.name} (${Dim.format(target.dimension)})`,
-      `assign units via a 'declare' or a literal like '5 ${target.name}'`,
+      `assign units via a 'unit' decl or a literal like '5 ${target.name}'`,
     )
   }
   if (!Dim.equals(q.unit.dimension, target.dimension)) {

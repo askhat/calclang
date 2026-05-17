@@ -1,13 +1,13 @@
 # Юниты
-declare usd base currency
-declare kzt (usd / 467,245543)
-declare rub (usd / 90,5)
+unit usd base currency
+unit kzt (usd / 467,245543)
+unit rub (usd / 90,5)
 
-declare kg base mass
-declare gr (kg / 1_000)
+unit kg base mass
+unit gr (kg / 1_000)
 
-declare m base length
-declare s base time
+unit m base length
+unit s base time
 
 # Переменные
 -10 minusTen                                      // = -10

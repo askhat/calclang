@@ -3,7 +3,7 @@ export type TokenKind =
   | "NUMBER"
   | "IDENT"
   // keywords
-  | "DECLARE"
+  | "UNIT"
   | "BASE"
   | "AS"
   | "IF"
@@ -50,7 +50,7 @@ export type Token = {
 }
 
 export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
-  declare: "DECLARE",
+  unit: "UNIT",
   base: "BASE",
   as: "AS",
   if: "IF",

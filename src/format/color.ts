@@ -5,9 +5,12 @@
  */
 
 const useColor: boolean = (() => {
-  if (process.env["NO_COLOR"]) return false
-  if (process.env["FORCE_COLOR"]) return true
-  return Boolean(process.stdout.isTTY)
+  // In the browser there's no `process`; color codes would just clutter
+  // the DOM since we style via CSS classes, so disabling here is correct.
+  if (typeof process === "undefined") return false
+  if (process.env?.["NO_COLOR"]) return false
+  if (process.env?.["FORCE_COLOR"]) return true
+  return Boolean(process.stdout?.isTTY)
 })()
 
 function wrap(text: string, code: number): string {

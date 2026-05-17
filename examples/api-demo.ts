@@ -8,14 +8,14 @@ import { UnitRegistry } from "../src/units/registry.ts"
 
 const reg = new UnitRegistry()
 
-// declare usd base currency
+// unit usd base currency
 const usd = reg.registerBase("usd", "currency")
-// declare kzt (usd / 467,245543)
+// unit kzt (usd / 467,245543)
 const kzt = reg.registerDerived(
   "kzt",
   Q.div(Q.ofUnit(1, usd), Q.dimensionless("467.245543")),
 )
-// declare rub (usd / 90,5)
+// unit rub (usd / 90,5)
 const rub = reg.registerDerived(
   "rub",
   Q.div(Q.ofUnit(1, usd), Q.dimensionless("90.5")),

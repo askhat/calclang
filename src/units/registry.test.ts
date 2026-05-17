@@ -33,7 +33,7 @@ describe("registerDerived", () => {
   test("from spec: rub = usd / 90.5", () => {
     const reg = new UnitRegistry()
     const usd = reg.registerBase("usd", "currency")
-    // body of declare evaluates to (1/90.5) usd; we pass that quantity in.
+    // body of unit decl evaluates to (1/90.5) usd; we pass that quantity in.
     const body = Q.div(Q.ofUnit(1, usd), Q.dimensionless("90.5"))
     const rub = reg.registerDerived("rub", body)
     expect(rub.dimension).toEqual({ currency: 1 })
@@ -72,7 +72,7 @@ describe("registerDerived", () => {
     try {
       reg.registerDerived("nope", Q.dimensionless(5))
     } catch (e) {
-      expect((e as UnitError).hint).toContain("declare nope")
+      expect((e as UnitError).hint).toContain("unit nope")
     }
   })
 })

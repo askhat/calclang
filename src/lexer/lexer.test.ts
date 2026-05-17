@@ -106,7 +106,7 @@ describe("identifiers and keywords", () => {
 
   test("every keyword is recognized", () => {
     const cases: Array<[string, TokenKind]> = [
-      ["declare", "DECLARE"],
+      ["unit", "UNIT"],
       ["base", "BASE"],
       ["as", "AS"],
       ["if", "IF"],
@@ -243,9 +243,9 @@ describe("composite forms from the spec", () => {
     expect(tokens[0]?.value).toBe("35.5")
   })
 
-  test("declare with composite unit", () => {
-    expect(kinds("declare kzt (usd / 467,245543)")).toEqual([
-      "DECLARE",
+  test("unit decl with composite unit", () => {
+    expect(kinds("unit kzt (usd / 467,245543)")).toEqual([
+      "UNIT",
       "IDENT",
       "LPAREN",
       "IDENT",

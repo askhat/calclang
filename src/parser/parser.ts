@@ -61,12 +61,12 @@ const KIND_NAMES: Partial<Record<TokenKind, string>> = {
   NUMBER: "number",
 }
 
-/** First pass: scan for `declare X ...` lines and collect the X names. */
+/** First pass: scan for `unit X ...` lines and collect the X names. */
 export function collectUnitNames(tokens: readonly Token[]): Set<string> {
   const names = new Set<string>()
   for (let i = 0; i < tokens.length - 1; i++) {
     if (
-      tokens[i]?.kind === "DECLARE" &&
+      tokens[i]?.kind === "UNIT" &&
       tokens[i + 1]?.kind === "IDENT"
     ) {
       names.add(tokens[i + 1]!.lexeme)
@@ -119,7 +119,7 @@ class Parser {
 
   private parseStatement(): Statement | null {
     const t = this.peek()
-    if (t.kind === "DECLARE") return this.parseDeclaration()
+    if (t.kind === "UNIT") return this.parseDeclaration()
     if (this.isVariableDeclStart()) return this.parseVariableDecl()
     return this.parseExpressionOrAssignment()
   }
@@ -170,7 +170,7 @@ class Parser {
   }
 
   private parseDeclaration(): UnitDecl | null {
-    const declareTok = this.advance() // 'declare'
+    const unitKwTok = this.advance() // 'unit'
     const nameTok = this.expect("IDENT")
     if (!nameTok) return null
 
@@ -204,7 +204,7 @@ class Parser {
       type: "unitDecl",
       name: nameTok.lexeme,
       def,
-      pos: pos(declareTok),
+      pos: pos(unitKwTok),
     }
   }
 
@@ -234,7 +234,7 @@ class Parser {
         this.diagnose(
           unitTok,
           `unknown unit '${unitTok.lexeme}'`,
-          `add 'declare ${unitTok.lexeme} base <dim>' or 'declare ${unitTok.lexeme} (<expr>)'`,
+          `add 'unit ${unitTok.lexeme} base <dim>' or 'unit ${unitTok.lexeme} (<expr>)'`,
         )
       }
       unit = {
@@ -423,7 +423,7 @@ class Parser {
             this.diagnose(
               next,
               `unknown unit '${next.lexeme}'`,
-              `add 'declare ${next.lexeme} base <dim>' or 'declare ${next.lexeme} (<expr>)'`,
+              `add 'unit ${next.lexeme} base <dim>' or 'unit ${next.lexeme} (<expr>)'`,
             )
             unit = {
               type: "unitRef",

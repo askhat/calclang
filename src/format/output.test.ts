@@ -105,10 +105,10 @@ describe("annotateSource (end-to-end)", () => {
 
   test("declarations get no annotation", () => {
     const out = evalAndAnnotate(
-      ["declare kg base mass", "5 kg flour"].join("\n"),
+      ["unit kg base mass", "5 kg flour"].join("\n"),
     )
     const lines = out.split("\n")
-    expect(lines[0]).toBe("declare kg base mass") // unchanged
+    expect(lines[0]).toBe("unit kg base mass") // unchanged
     expect(lines[1]).toContain("// = 5 kg") // variableDecl gets annotation
   })
 
@@ -159,7 +159,7 @@ describe("replLine", () => {
   })
 
   test("unit declaration: no line", () => {
-    expect(replLine(evalOne("declare kg base mass"))).toBeNull()
+    expect(replLine(evalOne("unit kg base mass"))).toBeNull()
   })
 
   test("error: 'error: ...'", () => {
