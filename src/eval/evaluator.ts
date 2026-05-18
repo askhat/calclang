@@ -7,6 +7,7 @@ import type {
   FunctionDecl,
   Position,
   Program,
+  RangeDecl,
   SeriesDecl,
   SeriesMember,
   Statement,
@@ -21,8 +22,20 @@ import type { Quantity } from "../units/quantity.ts"
 import { UnitRegistry } from "../units/registry.ts"
 import type { Unit } from "../units/unit.ts"
 import { suggest } from "../util/levenshtein.ts"
+import {
+  AGGREGATE_METHODS,
+  computeAggregate,
+  materializeRange,
+  type RangeValue,
+  type SeriesValue,
+} from "./collection.ts"
 import { EvalError } from "./errors.ts"
-import { asBoolean, asQuantity, type Value } from "./value.ts"
+import { asBoolean, asQuantity, isRange, type Value } from "./value.ts"
+
+// Re-exports for backward compatibility with frontend/calc-engine.ts and any
+// out-of-tree consumers that imported these directly from evaluator.
+export { computeAggregate } from "./collection.ts"
+export type { RangeValue, SeriesValue } from "./collection.ts"
 
 // 40 significant digits — generous headroom over decimal.js's default 20.
 // A future `# precision N` directive can raise this further.
@@ -33,25 +46,15 @@ type VarBinding =
   | { state: "resolving" }
   | { state: "ready"; value: Value }
 
-export type SeriesValue = {
-  /** Evaluated members in source order. All share `dimension`. */
-  members: Quantity[]
-  /** Unified dimension vector for the members (`{}` for dimensionless). */
-  dimension: import("../units/dimension.ts").DimensionVector
-  /**
-   * The series' "default" unit — the unit of the last member that had an
-   * explicit unit. `null` iff every member is dimensionless. Unit-less
-   * members are promoted into this unit; aggregates render in it.
-   */
-  seriesUnit: Unit | null
-  /** Map from named-member name to its (post-promotion) Quantity. */
-  byName: ReadonlyMap<string, Quantity>
-}
-
 type SeriesBinding =
   | { state: "pending"; decl: SeriesDecl }
   | { state: "resolving" }
   | { state: "ready"; value: SeriesValue }
+
+type RangeBinding =
+  | { state: "pending"; decl: RangeDecl }
+  | { state: "resolving" }
+  | { state: "ready"; value: RangeValue }
 
 export type RunResult = {
   stmt: Statement
@@ -86,6 +89,7 @@ export class Evaluator {
   readonly diagnostics: Diagnostic[] = []
   private readonly varEnv = new Map<string, VarBinding>()
   private readonly seriesEnv = new Map<string, SeriesBinding>()
+  private readonly rangeEnv = new Map<string, RangeBinding>()
   private readonly functionEnv = new Map<string, FunctionDecl>()
   /** Stack of local scopes pushed by active function calls. */
   private readonly localScopes: Array<Map<string, Value>> = []
@@ -194,11 +198,15 @@ export class Evaluator {
             )
             continue
           }
-          if (this.varEnv.has(stmt.name) || this.pendingUnits.has(stmt.name)) {
+          if (
+            this.varEnv.has(stmt.name) ||
+            this.pendingUnits.has(stmt.name) ||
+            this.rangeEnv.has(stmt.name)
+          ) {
             this.report(
               `name '${stmt.name}' is already declared`,
               stmt.pos,
-              "the name must be unique across units, variables, and series",
+              "the name must be unique across units, variables, series, ranges, and functions",
             )
             continue
           }
@@ -243,16 +251,41 @@ export class Evaluator {
           if (
             this.varEnv.has(stmt.name) ||
             this.pendingUnits.has(stmt.name) ||
-            this.seriesEnv.has(stmt.name)
+            this.seriesEnv.has(stmt.name) ||
+            this.rangeEnv.has(stmt.name)
           ) {
             this.report(
               `name '${stmt.name}' is already declared`,
               stmt.pos,
-              "the name must be unique across units, variables, series, and functions",
+              "the name must be unique across units, variables, series, ranges, and functions",
             )
             continue
           }
           this.functionEnv.set(stmt.name, stmt)
+          break
+        case "rangeDecl":
+          if (this.rangeEnv.has(stmt.name)) {
+            this.report(
+              `range '${stmt.name}' is already declared`,
+              stmt.pos,
+              "each range may be declared only once",
+            )
+            continue
+          }
+          if (
+            this.varEnv.has(stmt.name) ||
+            this.pendingUnits.has(stmt.name) ||
+            this.seriesEnv.has(stmt.name) ||
+            this.functionEnv.has(stmt.name)
+          ) {
+            this.report(
+              `name '${stmt.name}' is already declared`,
+              stmt.pos,
+              "the name must be unique across units, variables, series, ranges, and functions",
+            )
+            continue
+          }
+          this.rangeEnv.set(stmt.name, { state: "pending", decl: stmt })
           break
       }
     }
@@ -266,6 +299,13 @@ export class Evaluator {
   /** Ready series, for sidebar / debug introspection. */
   *readySeries(): IterableIterator<[string, SeriesValue]> {
     for (const [name, b] of this.seriesEnv) {
+      if (b.state === "ready") yield [name, b.value]
+    }
+  }
+
+  /** Ready ranges, for sidebar / debug introspection. */
+  *readyRanges(): IterableIterator<[string, RangeValue]> {
+    for (const [name, b] of this.rangeEnv) {
       if (b.state === "ready") yield [name, b.value]
     }
   }
@@ -307,6 +347,13 @@ export class Evaluator {
           // Function definitions are registered in pass 1; nothing to
           // compute at "run" time — they're templates evaluated per call.
           return { stmt, value: null, error: null }
+        case "rangeDecl": {
+          if (!this.rangeEnv.has(stmt.name)) {
+            return { stmt, value: null, error: null }
+          }
+          this.resolveRange(stmt.name, stmt.pos)
+          return { stmt, value: null, error: null }
+        }
       }
     } catch (err) {
       const evalErr = EvalError.from(err, stmt.pos)
@@ -461,6 +508,11 @@ export class Evaluator {
         if (this.varEnv.has(expr.name)) {
           return this.resolveVar(expr.name, expr.pos)
         }
+        if (this.rangeEnv.has(expr.name)) {
+          // Ranges ARE first-class values — bare reference returns the
+          // RangeValue so `.sum` etc. can dispatch off it.
+          return this.resolveRange(expr.name, expr.pos)
+        }
         if (this.seriesEnv.has(expr.name)) {
           throw new EvalError(
             `'${expr.name}' is a series — use it via a method like '${expr.name}.sum' or '${expr.name}.avg'`,
@@ -477,6 +529,7 @@ export class Evaluator {
         const allNames = new Set<string>(this.allUnitNames())
         for (const n of this.varEnv.keys()) allNames.add(n)
         for (const n of this.seriesEnv.keys()) allNames.add(n)
+        for (const n of this.rangeEnv.keys()) allNames.add(n)
         for (const n of this.functionEnv.keys()) allNames.add(n)
         throw new EvalError(
           `undefined name '${expr.name}'`,
@@ -531,33 +584,60 @@ export class Evaluator {
         }
       }
       case "property": {
-        // MVP: only series support property access. Other targets get a
-        // clearer error than "cannot read property of …".
-        if (expr.target.type !== "ident") {
-          throw new EvalError(
-            "property access is only supported on series identifiers",
-            expr.pos,
-          )
+        // Dispatch on the target. Series and ranges are the property-bearing
+        // values; quantities and booleans don't have properties.
+        if (expr.target.type === "ident") {
+          const name = expr.target.name
+          if (this.seriesEnv.has(name)) {
+            const series = this.resolveSeries(name, expr.target.pos)
+            // Named member wins over aggregate methods. Name collisions are
+            // rejected in pass 1, so this is a clean dispatch.
+            const named = series.byName.get(expr.property)
+            if (named) return named
+            if (!AGGREGATE_METHODS.has(expr.property)) {
+              const methods = [...AGGREGATE_METHODS].sort().join(", ")
+              const memberNames = [...series.byName.keys()]
+              const hint = memberNames.length
+                ? `available methods: ${methods}; members of '${name}': ${memberNames.join(", ")}`
+                : `available methods: ${methods}`
+              throw new EvalError(
+                `series '${name}' has no '.${expr.property}'`,
+                expr.pos,
+                hint,
+              )
+            }
+            return computeAggregate(series, expr.property, expr.pos)
+          }
+          if (this.rangeEnv.has(name)) {
+            const range = this.resolveRange(name, expr.target.pos)
+            if (!AGGREGATE_METHODS.has(expr.property)) {
+              const methods = [...AGGREGATE_METHODS].sort().join(", ")
+              throw new EvalError(
+                `range '${name}' has no '.${expr.property}'`,
+                expr.pos,
+                `available methods: ${methods}`,
+              )
+            }
+            return computeAggregate(range, expr.property, expr.pos)
+          }
+          // Ident exists but is not a series/range — fall through to evaluate.
         }
-        const seriesName = expr.target.name
-        const series = this.resolveSeries(seriesName, expr.target.pos)
-        // Named member wins over aggregate methods. Name collisions are
-        // already rejected in pass 1, so this is a clean dispatch.
-        const named = series.byName.get(expr.property)
-        if (named) return named
-        if (!AGGREGATE_METHODS.has(expr.property)) {
-          const methods = [...AGGREGATE_METHODS].sort().join(", ")
-          const memberNames = [...series.byName.keys()]
-          const hint = memberNames.length
-            ? `available methods: ${methods}; members of '${seriesName}': ${memberNames.join(", ")}`
-            : `available methods: ${methods}`
-          throw new EvalError(
-            `series '${seriesName}' has no '.${expr.property}'`,
-            expr.pos,
-            hint,
-          )
+        // Inline / parenthesized targets: evaluate and dispatch on the value.
+        const targetVal = this.evalExpr(expr.target)
+        if (isRange(targetVal)) {
+          if (!AGGREGATE_METHODS.has(expr.property)) {
+            throw new EvalError(
+              `range has no '.${expr.property}'`,
+              expr.pos,
+              "available methods: sum, avg, count, min, max",
+            )
+          }
+          return computeAggregate(targetVal, expr.property, expr.pos)
         }
-        return computeAggregate(series, expr.property, expr.pos)
+        throw new EvalError(
+          "property access is only supported on series and ranges",
+          expr.pos,
+        )
       }
       case "call": {
         const fn = this.functionEnv.get(expr.callee)
@@ -607,6 +687,13 @@ export class Evaluator {
           this.localScopes.pop()
         }
       }
+      case "range": {
+        const startV = this.evalExpr(expr.start)
+        const startQ = asQuantity(startV, expr.start.pos)
+        const endV = this.evalExpr(expr.end)
+        const endQ = asQuantity(endV, expr.end.pos)
+        return materializeRange(startQ, endQ, expr.inclusive, expr.pos)
+      }
     }
   }
 
@@ -640,11 +727,11 @@ export class Evaluator {
       }
 
       // Phase 2: series unit = unit of the last member that brought one.
-      let seriesUnit: Unit | null = null
+      let unit: Unit | null = null
       for (let i = evaluated.length - 1; i >= 0; i--) {
         const u = evaluated[i]!.q.unit
         if (u) {
-          seriesUnit = u
+          unit = u
           break
         }
       }
@@ -653,11 +740,11 @@ export class Evaluator {
       // dimension consistency, and index named members.
       const members: Quantity[] = []
       const byName = new Map<string, Quantity>()
-      const expectedDim = seriesUnit?.dimension ?? {}
+      const expectedDim = unit?.dimension ?? {}
       for (const { q, member } of evaluated) {
         let promoted = q
-        if (!q.unit && seriesUnit) {
-          promoted = { value: q.value, unit: seriesUnit }
+        if (!q.unit && unit) {
+          promoted = { value: q.value, unit }
         }
         const promotedDim = promoted.unit?.dimension ?? {}
         if (!Dim.equals(expectedDim, promotedDim)) {
@@ -672,15 +759,51 @@ export class Evaluator {
       }
 
       const value: SeriesValue = {
+        kind: "series",
         members,
         dimension: expectedDim,
-        seriesUnit,
+        unit,
         byName,
       }
       this.seriesEnv.set(name, { state: "ready", value })
       return value
     } catch (err) {
       this.seriesEnv.set(name, original)
+      throw err
+    } finally {
+      this.resolvingStack.pop()
+    }
+  }
+
+  private resolveRange(name: string, refPos: Position): RangeValue {
+    const binding = this.rangeEnv.get(name)
+    if (!binding) {
+      throw new EvalError(
+        `undefined range '${name}'`,
+        refPos,
+        this.didYouMean(name, this.rangeEnv.keys()),
+      )
+    }
+    if (binding.state === "ready") return binding.value
+    if (binding.state === "resolving") {
+      throw new EvalError(
+        `cyclic dependency: ${this.cycleTrail(name)}`,
+        refPos,
+      )
+    }
+
+    const original = binding
+    this.rangeEnv.set(name, { state: "resolving" })
+    this.resolvingStack.push(name)
+    try {
+      const r = original.decl.range
+      const startQ = asQuantity(this.evalExpr(r.start), r.start.pos)
+      const endQ = asQuantity(this.evalExpr(r.end), r.end.pos)
+      const value = materializeRange(startQ, endQ, r.inclusive, r.pos)
+      this.rangeEnv.set(name, { state: "ready", value })
+      return value
+    } catch (err) {
+      this.rangeEnv.set(name, original)
       throw err
     } finally {
       this.resolvingStack.pop()
@@ -747,109 +870,4 @@ export function evaluateProgram(program: Program): EvalResult {
   const ev = new Evaluator()
   const results = ev.feed(program)
   return { results, diagnostics: ev.diagnostics, registry: ev.registry }
-}
-
-// -- Series aggregate helpers --
-
-const AGGREGATE_METHODS = new Set(["sum", "avg", "count", "min", "max"])
-
-export function computeAggregate(
-  series: SeriesValue,
-  method: string,
-  pos: Position,
-): Value {
-  if (method === "count") {
-    return { value: new Decimal(series.members.length), unit: null }
-  }
-  if (!AGGREGATE_METHODS.has(method)) {
-    throw new EvalError(
-      `unknown series method '.${method}'`,
-      pos,
-      "available methods: sum, avg, count, min, max",
-    )
-  }
-  if (series.members.length === 0) {
-    throw new EvalError(
-      `cannot compute '.${method}' on an empty series`,
-      pos,
-      "either add members or use '.count' which is 0 for empty series",
-    )
-  }
-
-  switch (method) {
-    case "sum":
-      return sumSeries(series, pos)
-    case "avg":
-      return avgSeries(series, pos)
-    case "min":
-      return extremeSeries(series, pos, "min")
-    case "max":
-      return extremeSeries(series, pos, "max")
-  }
-  // Should be unreachable thanks to AGGREGATE_METHODS check above.
-  throw new EvalError(`unhandled aggregate '${method}'`, pos)
-}
-
-function sumSeries(series: SeriesValue, pos: Position): Quantity {
-  try {
-    let acc = series.members[0]!
-    for (let i = 1; i < series.members.length; i++) {
-      // Q.add lets the right operand's unit win. After Phase-3 promotion,
-      // the last member's unit IS the series unit, so folding left-to-right
-      // naturally yields a result in the series unit.
-      acc = Q.add(acc, series.members[i]!)
-    }
-    return inSeriesUnit(acc, series, pos)
-  } catch (err) {
-    throw EvalError.from(err, pos)
-  }
-}
-
-function avgSeries(series: SeriesValue, pos: Position): Quantity {
-  const total = sumSeries(series, pos)
-  try {
-    return Q.div(total, {
-      value: new Decimal(series.members.length),
-      unit: null,
-    })
-  } catch (err) {
-    throw EvalError.from(err, pos)
-  }
-}
-
-function extremeSeries(
-  series: SeriesValue,
-  pos: Position,
-  kind: "min" | "max",
-): Quantity {
-  try {
-    let best = series.members[0]!
-    for (let i = 1; i < series.members.length; i++) {
-      const cmp = Q.compare(series.members[i]!, best)
-      if (kind === "min" ? cmp < 0 : cmp > 0) best = series.members[i]!
-    }
-    return inSeriesUnit(best, series, pos)
-  } catch (err) {
-    throw EvalError.from(err, pos)
-  }
-}
-
-/**
- * Coerce an aggregate result into the series unit so `.sum`, `.avg`, `.min`,
- * `.max` always render in the same unit even when members were mixed (e.g.
- * rub + usd within the Currency dimension).
- */
-function inSeriesUnit(
-  q: Quantity,
-  series: SeriesValue,
-  pos: Position,
-): Quantity {
-  if (!series.seriesUnit) return q
-  if (!q.unit) return { value: q.value, unit: series.seriesUnit }
-  if (q.unit === series.seriesUnit) return q
-  try {
-    return Q.convert(q, series.seriesUnit)
-  } catch (err) {
-    throw EvalError.from(err, pos)
-  }
 }

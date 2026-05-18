@@ -183,6 +183,66 @@ describe("operators and punctuation", () => {
   test("'==' is one token, not two '='", () => {
     expect(kinds("==")).toEqual(["EQEQ", "EOF"])
   })
+
+  test("'..' lexes as DOTDOT (inclusive range)", () => {
+    expect(kinds("1..10")).toEqual(["NUMBER", "DOTDOT", "NUMBER", "EOF"])
+  })
+
+  test("'...' lexes as DOTDOTDOT (exclusive range)", () => {
+    expect(kinds("1...10")).toEqual(["NUMBER", "DOTDOTDOT", "NUMBER", "EOF"])
+  })
+
+  test("'.' still lexes as DOT when alone", () => {
+    expect(kinds("a.b")).toEqual(["IDENT", "DOT", "IDENT", "EOF"])
+  })
+
+  test("decimal-then-range: '1,5..5,5' (RU locale)", () => {
+    expect(kinds("1,5..5,5")).toEqual([
+      "NUMBER",
+      "DOTDOT",
+      "NUMBER",
+      "EOF",
+    ])
+  })
+
+  test("range positions are correct", () => {
+    const { tokens } = tokenize("1..10")
+    expect(tokens[1]).toMatchObject({
+      kind: "DOTDOT",
+      lexeme: "..",
+      line: 1,
+      col: 2,
+    })
+    expect(tokens[2]).toMatchObject({ kind: "NUMBER", col: 4 })
+  })
+
+  test("dot-locale: '1.5..10' (decimal then range)", () => {
+    const { tokens } = tokenize("1.5..10", { decimalSeparator: "." })
+    expect(tokens.map((t) => t.kind)).toEqual([
+      "NUMBER",
+      "DOTDOT",
+      "NUMBER",
+      "EOF",
+    ])
+    expect(tokens[0]?.value).toBe("1.5")
+  })
+
+  test("RANGE keyword", () => {
+    expect(kinds("RANGE foo 1 10")).toEqual([
+      "RANGE",
+      "IDENT",
+      "NUMBER",
+      "NUMBER",
+      "EOF",
+    ])
+  })
+
+  test("lowercase 'range' is a regular identifier", () => {
+    expect(tokenize("range").tokens[0]).toMatchObject({
+      kind: "IDENT",
+      lexeme: "range",
+    })
+  })
 })
 
 describe("comments", () => {

@@ -1,7 +1,8 @@
 import Decimal from "decimal.js"
 import type { Diagnostic } from "../errors/diagnostic.ts"
+import type { RangeValue } from "../eval/collection.ts"
 import type { RunResult } from "../eval/evaluator.ts"
-import { isBoolean, isQuantity } from "../eval/value.ts"
+import { isBoolean, isQuantity, isRange, type Value } from "../eval/value.ts"
 import type { Quantity } from "../units/quantity.ts"
 import { bold, gray, red, yellow } from "./color.ts"
 
@@ -52,11 +53,19 @@ export function formatQuantity(q: Quantity, locale: Locale = DEFAULT_LOCALE): st
   return q.unit ? `${v} ${q.unit.name}` : v
 }
 
+export function formatRange(r: RangeValue, locale: Locale = DEFAULT_LOCALE): string {
+  const sep = r.inclusive ? ".." : "..."
+  const start = formatQuantity(r.start, locale)
+  const end = formatQuantity(r.end, locale)
+  return `${start}${sep}${end} (n=${r.members.length})`
+}
+
 export function formatValue(
-  v: boolean | Quantity,
+  v: Value,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
-  if (typeof v === "boolean") return v ? "true" : "false"
+  if (isBoolean(v)) return v ? "true" : "false"
+  if (isRange(v)) return formatRange(v, locale)
   return formatQuantity(v, locale)
 }
 
@@ -77,6 +86,7 @@ export function annotation(
     case "unitDecl":
     case "seriesDecl":
     case "functionDecl":
+    case "rangeDecl":
       return null
     case "variableDecl":
     case "exprAssignment":
@@ -102,6 +112,7 @@ export function replLine(
     case "unitDecl":
     case "seriesDecl":
     case "functionDecl":
+    case "rangeDecl":
       return null
     case "variableDecl":
     case "exprAssignment":

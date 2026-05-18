@@ -22,9 +22,10 @@ const SINGLE_CHAR: Readonly<Record<string, TokenKind>> = {
   ")": "RPAREN",
   "?": "QUESTION",
   ":": "COLON",
-  ".": "DOT",
   ",": "COMMA",
 }
+// '.' is handled separately so we can lex '..' / '...' as range operators
+// before falling back to the single-char DOT (property access).
 // Note on DOT/COMMA when they collide with a locale's decimal separator:
 // number() consumes a digit-adjacent '.' or ',' first, so by the time
 // scanToken reaches the single-char table the punctuation is unambiguously
@@ -74,6 +75,21 @@ class Lexer {
     }
     if (this.isIdentStart(c)) {
       this.identifier(startLine, startCol)
+      return
+    }
+
+    if (c === ".") {
+      this.advance()
+      if (this.peek() === "." && this.peek(1) === ".") {
+        this.advance()
+        this.advance()
+        this.push("DOTDOTDOT", "...", startLine, startCol)
+      } else if (this.peek() === ".") {
+        this.advance()
+        this.push("DOTDOT", "..", startLine, startCol)
+      } else {
+        this.push("DOT", ".", startLine, startCol)
+      }
       return
     }
 

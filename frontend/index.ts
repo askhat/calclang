@@ -21,23 +21,127 @@ import {
 } from "./storage/filesystem.ts"
 
 const STARTER = `# Welcome to Calc! Edit anything and watch results update.
+# Comments start with '#'. Decimal separator is ','. Underscore groups: 1_000.
+
+# ─── Units ──────────────────────────────────────────────────────────────
 # Dimensions are Capitalized; unit and variable names are lowercase.
-# Two forms for unit declarations:
-#   UNIT <Dim> <name>            — simple, factor 1
-#   UNIT (<expr>) <name>         — composite, dim inferred from body
+#   UNIT <Dim> <name>             — simple, factor 1 in <Dim>
+#   UNIT <Dim> <name> (<expr>)    — composite, body must match <Dim>
+#   UNIT (<expr>) <name>          — composite, dim inferred from body
 
 UNIT Currency usd
 UNIT (usd / 90,5) rub
-UNIT (usd / 467,245543) kzt
+UNIT Currency kzt (usd / 467,245543)
+UNIT Mass kg
+UNIT Mass gr (kg / 1_000)
+UNIT Length m
+UNIT Time s
 
+# ─── Variables ──────────────────────────────────────────────────────────
+# [+|-]? NUMBER [unit] <name>
+
+-10 minusTen
 35,5 rub salary
-salary + 10 = total
-salary as kzt = salaryInKzt
-100 rub + 5 usd
+9,8 (m / s ^ 2) gravity
 
-# Try Alt+↑ / Alt+↓ on a number to nudge it.
-# Hover an identifier for its value.
-# Files persist in your browser; pick a different one in the sidebar.
+# ─── Expressions ────────────────────────────────────────────────────────
+# Bare expressions show their result on the right.
+# 'expr = name' assigns. 'as <unit>' converts. Right operand's unit wins.
+
+salary + minusTen = total
+salary as kzt = salaryInKzt
+100 rub + 5 usd                  # right unit wins → usd
+2 ^ 10                           # power
+(1 + 2) * 3                      # parens
+
+# ─── Conditionals ───────────────────────────────────────────────────────
+# Boolean ops: and / or / not. Comparisons: == != < > <= >=.
+# Ternary: cond ? a : b, or if cond then a else b.
+
+salary > 0 and salary < 100 rub
+salary > 0 ? salary : -salary
+if total > 0 then total else 0
+
+# ─── Series ─────────────────────────────────────────────────────────────
+# SERIES <name> then member lines. Blank line / EOF / next keyword end it.
+# Members may be named: <expr> <name>. Access via '.'.
+# Aggregates: .count .sum .avg .min .max
+
+SERIES wallet
+100 rub
+5 usd
+2_000 rub
+50 usd
+
+wallet.sum
+wallet.avg
+wallet.count
+
+SERIES budget
+500 usd salary
+400 bonus              # no unit → inherits series unit (last explicit = rub)
+-100 rub tax
+
+budget.salary
+budget.bonus
+budget.sum
+
+# ─── Ranges ─────────────────────────────────────────────────────────────
+# Iterable with monotonic step 1.
+#   <start>..<end>  — inclusive    (1..10 → 1, 2, ..., 10)
+#   <start>...<end> — exclusive    (1...10 → 1, 2, ..., 9)
+#   <start>..<end> <name>          — bind a name (like a series)
+#   RANGE <name> <start> <end>     — keyword form (inclusive only)
+# Same aggregates as SERIES: .sum .avg .count .min .max
+# start > end walks down. Decimal endpoints OK; units flow through.
+
+1..10 onesToTen
+onesToTen.sum
+onesToTen.avg
+
+1...5             # bare exclusive range — annotation shows count
+
+10..1 down        # reverse direction
+down.sum
+
+RANGE prices 1 usd 10 usd
+prices.sum
+prices.avg
+
+(1..100).sum      # inline parenthesized range
+
+# ─── Functions ──────────────────────────────────────────────────────────
+# FN <name>(<params>) <body>. Body is a single expression.
+
+FN double(x) x * 2
+FN avg2(a, b) (a + b) / 2
+FN circleArea(r) 3,14159265 * r ^ 2
+
+double(7)
+avg2(10, 30)
+circleArea(5)
+
+# Functions with units
+FN kinetic(m, v) m * v ^ 2 / 2
+kinetic(70 kg, 10 m / s)
+
+# Recursion via if/then/else
+FN fact(n) if n < 2 then 1 else n * fact(n - 1)
+fact(5)
+
+# Functions can reach into series
+SERIES temps
+10
+20
+30
+
+FN scaled(k) temps.sum * k
+scaled(2)
+
+# ─── Tips ───────────────────────────────────────────────────────────────
+# • Alt+↑ / Alt+↓ on a number nudges it.
+# • Hover an identifier for its value.
+# • Files persist in your browser; switch in the sidebar.
 `
 
 const SAVE_DEBOUNCE_MS = 400

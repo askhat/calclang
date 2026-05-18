@@ -38,6 +38,7 @@ export type Expr =
   | ConversionExpr
   | PropertyAccess
   | FunctionCall
+  | RangeLit
 
 export type NumberLit = {
   type: "number"
@@ -121,6 +122,19 @@ export type FunctionCall = {
   type: "call"
   callee: string
   args: Expr[]
+  pos: Position
+}
+
+/**
+ * `start..end` (inclusive) or `start...end` (exclusive). Materializes to a
+ * Range value at evaluation time. Endpoints can be any expression; step is
+ * always ±1 and direction is inferred from `start` vs `end`.
+ */
+export type RangeLit = {
+  type: "range"
+  start: Expr
+  end: Expr
+  inclusive: boolean
   pos: Position
 }
 
@@ -208,6 +222,18 @@ export type FunctionDecl = {
   pos: Position
 }
 
+/**
+ * Names a range expression. Two source forms collapse into this:
+ *   <range_expr> <ident>            — `1..10 myRange`
+ *   RANGE <ident> <start> <end>     — keyword form (inclusive)
+ */
+export type RangeDecl = {
+  type: "rangeDecl"
+  name: string
+  range: RangeLit
+  pos: Position
+}
+
 export type Statement =
   | UnitDecl
   | VariableDecl
@@ -215,6 +241,7 @@ export type Statement =
   | ExprStatement
   | SeriesDecl
   | FunctionDecl
+  | RangeDecl
 
 export type Program = {
   statements: Statement[]
@@ -244,6 +271,8 @@ export function showExpr(e: Expr): string {
       const args = e.args.map(showExpr).join(" ")
       return `(call ${e.callee}${args ? " " + args : ""})`
     }
+    case "range":
+      return `(${e.inclusive ? "range" : "range-excl"} ${showExpr(e.start)} ${showExpr(e.end)})`
   }
 }
 
@@ -282,6 +311,8 @@ export function showStatement(s: Statement): string {
       const ps = s.params.length ? ` (${s.params.join(" ")})` : " ()"
       return `(fn ${s.name}${ps} ${showExpr(s.body)})`
     }
+    case "rangeDecl":
+      return `(range-decl ${s.name} ${showExpr(s.range)})`
   }
 }
 

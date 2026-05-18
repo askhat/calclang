@@ -26,7 +26,7 @@ bun run src/index.ts examples/budget.calc   # evaluate a file
 bun run src/index.ts                        # REPL
 bun run src/index.ts --tokens file.calc     # token dump
 bun run src/index.ts --ast file.calc        # AST dump
-bun test                                    # 295+ tests
+bun test                                    # 460+ tests
 ```
 
 In the REPL, `:help` lists commands; `:units` and `:vars` dump the current
@@ -74,6 +74,23 @@ anonymous one-offs.
 ```calc
 100 rub + 5 usd                     # right unit wins → 6,10... usd
 2 kg flour                          # var_decl, but in expression position it'd be a quantity literal
+```
+
+**Series and ranges.** Both are iterable collections with the same
+aggregate methods (`.sum`, `.avg`, `.count`, `.min`, `.max`).
+
+```calc
+SERIES wallet                       # explicit members, one per line
+100 rub
+5 usd
+wallet.sum                          # in series unit (last explicit)
+
+1..10 days                          # inclusive range, step 1
+1...10                              # exclusive (1, 2, ..., 9)
+10..1                               # walks down: 10, 9, ..., 1
+RANGE prices 1 usd 10 usd           # keyword form, inclusive only
+prices.avg                          # 5,5 usd
+(1..100).sum                        # inline parenthesized → 5 050
 ```
 
 ## Semantics in one minute
@@ -133,7 +150,8 @@ purely structural — fixed-distance lookahead, no backtracking.
 - `# locale en-US` and `# precision N` directives (scaffolding in place but
   not wired).
 - Live FX rates for `unit X currency` aliases.
-- User-defined functions, loops, recursion.
+- Loops (recursion via `if/then/else` works; see `examples/functions.calc`).
+- Custom range step (currently fixed at ±1).
 - Running-total syntax (`+ 50` on its own line).
 - Multi-line REPL input.
 - LSP and editor integrations.

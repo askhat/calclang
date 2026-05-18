@@ -4,6 +4,7 @@ import type { EngineRun } from "./calc-engine.ts"
 
 const VARS_ID = "vars-list"
 const SERIES_ID = "series-list"
+const RANGES_ID = "ranges-list"
 const FUNCTIONS_ID = "functions-list"
 const UNITS_ID = "units-list"
 const DIAGS_ID = "diagnostics-list"
@@ -11,6 +12,7 @@ const DIAGS_ID = "diagnostics-list"
 export function renderSidebar(run: EngineRun): void {
   renderVariables(run)
   renderSeries(run)
+  renderRanges(run)
   renderFunctions(run)
   renderUnits(run)
   renderDiagnostics(run)
@@ -69,6 +71,53 @@ function renderSeries(run: EngineRun): void {
         ["avg", s.avg],
         ["min", s.min],
         ["max", s.max],
+      ] as const) {
+        const dt = document.createElement("dt")
+        dt.textContent = label
+        const dd = document.createElement("dd")
+        dd.textContent = value ? formatValue(value) : "—"
+        stats.append(dt, dd)
+      }
+      li.appendChild(stats)
+    }
+
+    list.appendChild(li)
+  }
+}
+
+function renderRanges(run: EngineRun): void {
+  const list = document.getElementById(RANGES_ID)
+  if (!list) return
+  list.innerHTML = ""
+  if (run.ranges.length === 0) {
+    list.appendChild(emptyItem("(none yet)"))
+    return
+  }
+  for (const r of run.ranges) {
+    const li = document.createElement("li")
+    li.className = "series-item"
+    li.title = "use .sum / .avg / .count / .min / .max"
+
+    const head = document.createElement("div")
+    head.className = "series-head"
+    const name = document.createElement("span")
+    name.className = "kv-name"
+    const sep = r.inclusive ? ".." : "..."
+    name.textContent = `${r.name} = ${formatValue(r.start)}${sep}${formatValue(r.end)}`
+    const count = document.createElement("span")
+    count.className = "kv-value"
+    count.textContent = `n=${r.count}`
+    head.append(name, count)
+    li.appendChild(head)
+
+    if (r.count > 0) {
+      const stats = document.createElement("dl")
+      stats.className = "series-stats"
+      for (const [label, value] of [
+        ["sum", r.sum],
+        ["avg", r.avg],
+        ["min", r.min],
+        ["max", r.max],
       ] as const) {
         const dt = document.createElement("dt")
         dt.textContent = label

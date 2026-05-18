@@ -10,6 +10,8 @@ import type {
   NumberLit,
   Position,
   Program,
+  RangeDecl,
+  RangeLit,
   SeriesDecl,
   SeriesMember,
   Statement,
@@ -131,6 +133,7 @@ class Parser {
         after === "EOF" ||
         after === "UNIT" ||
         after === "SERIES" ||
+        after === "RANGE" ||
         after === "FN"
       if (!atBoundary) {
         if (stmt) {
@@ -150,9 +153,38 @@ class Parser {
     const t = this.peek()
     if (t.kind === "UNIT") return this.parseDeclaration()
     if (t.kind === "SERIES") return this.parseSeriesDecl()
+    if (t.kind === "RANGE") return this.parseRangeDeclKeyword()
     if (t.kind === "FN") return this.parseFunctionDecl()
     if (this.isVariableDeclStart()) return this.parseVariableDecl()
     return this.parseExpressionOrAssignment()
+  }
+
+  /**
+   * `RANGE <name> <start> <end>` — inclusive only (the keyword form). The
+   * `<start>` and `<end>` are conditional-level expressions (no top-level
+   * `..` inside, to keep the form unambiguous).
+   */
+  private parseRangeDeclKeyword(): RangeDecl | null {
+    const rangeTok = this.advance() // 'RANGE'
+    const nameTok = this.expect("IDENT")
+    if (!nameTok) return null
+    const start = this.parseConditional()
+    if (!start) return null
+    const end = this.parseConditional()
+    if (!end) return null
+    const range: RangeLit = {
+      type: "range",
+      start,
+      end,
+      inclusive: true,
+      pos: pos(rangeTok),
+    }
+    return {
+      type: "rangeDecl",
+      name: nameTok.lexeme,
+      range,
+      pos: pos(rangeTok),
+    }
   }
 
   private parseFunctionDecl(): FunctionDecl | null {
@@ -203,6 +235,7 @@ class Parser {
         k === "EOF" ||
         k === "UNIT" ||
         k === "SERIES" ||
+        k === "RANGE" ||
         k === "FN"
       ) break
 
@@ -508,10 +541,25 @@ class Parser {
   private parseExpressionOrAssignment():
     | ExprAssignment
     | ExprStatement
+    | RangeDecl
     | null {
     const startTok = this.peek()
     const expr = this.parseExpressionRule()
     if (!expr) return null
+    // Range trailing-name form: `<range_expr> <ident>` (line end) → decl.
+    if (
+      expr.type === "range" &&
+      this.peek().kind === "IDENT" &&
+      this.isLineEnd(this.peek(1))
+    ) {
+      const nameTok = this.advance()
+      return {
+        type: "rangeDecl",
+        name: nameTok.lexeme,
+        range: expr,
+        pos: pos(startTok),
+      }
+    }
     if (this.peek().kind === "EQ") {
       this.advance()
       const nameTok = this.expect("IDENT")
@@ -556,15 +604,39 @@ class Parser {
     return expr
   }
 
+  /**
+   * Top of the expression grammar. Range (`..` / `...`) sits above the
+   * conditional/binary stack so endpoints are full expressions and
+   * `(1+2)..(3*4)` parses without parens.
+   */
   private parseExpressionRule(): Expr | null {
+    const left = this.parseConditional()
+    if (!left) return null
+    const k = this.peek().kind
+    if (k === "DOTDOT" || k === "DOTDOTDOT") {
+      const opTok = this.advance()
+      const right = this.parseConditional()
+      if (!right) return null
+      return {
+        type: "range",
+        start: left,
+        end: right,
+        inclusive: opTok.kind === "DOTDOT",
+        pos: pos(opTok),
+      }
+    }
+    return left
+  }
+
+  private parseConditional(): Expr | null {
     const left = this.parseBinary(0)
     if (!left) return null
     if (this.peek().kind === "QUESTION") {
       const qTok = this.advance()
-      const thenBranch = this.parseExpressionRule()
+      const thenBranch = this.parseConditional()
       if (!thenBranch) return null
       if (!this.expect("COLON")) return null
-      const elseBranch = this.parseExpressionRule()
+      const elseBranch = this.parseConditional()
       if (!elseBranch) return null
       return {
         type: "if",
@@ -669,6 +741,10 @@ class Parser {
               name: next.lexeme,
               pos: pos(next),
             }
+          } else if (this.isLineEnd(this.peek(1))) {
+            // `NUMBER unknownIdent (line end)` — leave the IDENT alone so a
+            // higher production (range-decl trailing name) can claim it.
+            // Top-level `35 unknownUnit` is already handled by parseVariableDecl.
           } else {
             // After a number, an adjacent IDENT must be a unit suffix —
             // the grammar has no implicit multiplication. Treat the unknown

@@ -1,10 +1,11 @@
 import type { Diagnostic } from "../src/errors/diagnostic.ts"
+import type { RangeValue } from "../src/eval/collection.ts"
 import {
   Evaluator,
   computeAggregate,
   type RunResult,
 } from "../src/eval/evaluator.ts"
-import { isQuantity } from "../src/eval/value.ts"
+import { isQuantity, type Value } from "../src/eval/value.ts"
 import { tokenize } from "../src/lexer/lexer.ts"
 import { parseProgram } from "../src/parser/parser.ts"
 import type { Quantity } from "../src/units/quantity.ts"
@@ -14,6 +15,19 @@ export type SeriesSummary = {
   name: string
   count: number
   /** null when the series is empty (no members to aggregate). */
+  sum: Quantity | null
+  avg: Quantity | null
+  min: Quantity | null
+  max: Quantity | null
+}
+
+export type RangeSummary = {
+  name: string
+  /** Source endpoints, for display ("1..10", "1...10"). */
+  start: Quantity
+  end: Quantity
+  inclusive: boolean
+  count: number
   sum: Quantity | null
   avg: Quantity | null
   min: Quantity | null
@@ -33,12 +47,14 @@ export type EngineRun = {
   evalDiagnostics: Diagnostic[]
   /** All diagnostics, ordered by position, deduplicated by (line, col, message). */
   allDiagnostics: Diagnostic[]
-  /** Ready variables for sidebar (name → quantity or boolean). */
-  variables: Array<{ name: string; value: Quantity | boolean }>
+  /** Ready variables for sidebar (name → value). */
+  variables: Array<{ name: string; value: Value }>
   /** Registered units for sidebar. */
   units: Unit[]
   /** Ready series for sidebar. */
   series: SeriesSummary[]
+  /** Ready ranges for sidebar. */
+  ranges: RangeSummary[]
   /** Declared functions for sidebar. */
   functions: FunctionSummary[]
 }
@@ -63,28 +79,45 @@ export function runPipeline(source: string): EngineRun {
 
     const units = [...ev.registry.all()]
 
-    const series: SeriesSummary[] = []
     const aggregatePos = { line: 0, col: 0 }
-    for (const [name, value] of ev.readySeries()) {
-      const count = value.members.length
-      const aggregate = (
-        method: "sum" | "avg" | "min" | "max",
-      ): Quantity | null => {
-        if (count === 0) return null
+    const aggregateOf =
+      <T extends { members: readonly Quantity[] }>(value: T) =>
+      (method: "sum" | "avg" | "min" | "max"): Quantity | null => {
+        if (value.members.length === 0) return null
         try {
-          const v = computeAggregate(value, method, aggregatePos)
+          const v = computeAggregate(value as never, method, aggregatePos)
           return isQuantity(v) ? v : null
         } catch {
           return null
         }
       }
+
+    const series: SeriesSummary[] = []
+    for (const [name, value] of ev.readySeries()) {
+      const agg = aggregateOf(value)
       series.push({
         name,
-        count,
-        sum: aggregate("sum"),
-        avg: aggregate("avg"),
-        min: aggregate("min"),
-        max: aggregate("max"),
+        count: value.members.length,
+        sum: agg("sum"),
+        avg: agg("avg"),
+        min: agg("min"),
+        max: agg("max"),
+      })
+    }
+
+    const ranges: RangeSummary[] = []
+    for (const [name, value] of ev.readyRanges()) {
+      const agg = aggregateOf(value)
+      ranges.push({
+        name,
+        start: value.start,
+        end: value.end,
+        inclusive: value.inclusive,
+        count: value.members.length,
+        sum: agg("sum"),
+        avg: agg("avg"),
+        min: agg("min"),
+        max: agg("max"),
       })
     }
 
@@ -109,6 +142,7 @@ export function runPipeline(source: string): EngineRun {
       variables,
       units,
       series,
+      ranges,
       functions,
     }
   } catch (err) {
@@ -130,6 +164,7 @@ export function runPipeline(source: string): EngineRun {
       variables: [],
       units: [],
       series: [],
+      ranges: [],
       functions: [],
     }
   }

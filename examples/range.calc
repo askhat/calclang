@@ -1,0 +1,70 @@
+# RANGE — итерируемая коллекция чисел с монотонным шагом 1.
+# Два литерала: `..` — inclusive (включает end), `...` — exclusive.
+
+# ─── Базовые литералы ───────────────────────────────────────────────────
+
+1..10 onesToTen
+onesToTen.count
+onesToTen.sum
+onesToTen.avg
+onesToTen.min
+onesToTen.max
+
+# Exclusive: 1, 2, ..., 9 — 9 членов, без 10
+1...10 exclusive
+exclusive.sum
+exclusive.count
+
+# Bare литерал без имени — печатает себя со счётчиком
+1..5
+1...5
+
+# ─── Десятичные границы и обратный порядок ──────────────────────────────
+
+# Шаг всё ещё 1, так что 1,5 → 2,5 → 3,5 → 4,5 → 5,5
+1,5..5,5 decimals
+decimals.sum
+decimals.avg
+
+# start > end → идём вниз: 10, 9, 8, ..., 1
+10..1 down
+down.sum
+down.count
+
+# ─── Keyword-форма (inclusive only) ─────────────────────────────────────
+
+RANGE keyword 1 100
+keyword.count
+keyword.sum
+
+# Endpoints могут быть выражениями
+RANGE squared (2 ^ 1) (2 ^ 4)
+squared.sum
+
+# ─── Юниты ──────────────────────────────────────────────────────────────
+
+UNIT Currency usd
+UNIT (usd / 90,5) rub
+
+# Оба endpoint в одной валюте — простой случай
+1 usd..10 usd wallet
+wallet.sum
+wallet.avg
+
+# Один endpoint без юнита — промоутится в юнит другого (как у SERIES)
+1..5 usd promoted
+promoted.sum
+
+# Разные юниты, одна dim — последний явный (end) задаёт юнит rangeа,
+# start конвертируется. 100 rub ≈ 1,105 usd → членов: 1,105; 2,105; 3,105; 4,105.
+100 rub..5 usd mixed
+mixed.count
+mixed.sum
+
+# ─── Inline aggregates на скобках ───────────────────────────────────────
+
+(1..100).sum
+(1..100).avg
+
+# Range можно сослаться по имени и подмешать в выражение
+onesToTen.sum + onesToTen.count
