@@ -8,6 +8,7 @@ export type TokenKind =
   | "RANGE"
   | "FN"
   | "AS"
+  | "OF"
   | "IF"
   | "THEN"
   | "ELSE"
@@ -19,6 +20,7 @@ export type TokenKind =
   | "MINUS"
   | "STAR"
   | "SLASH"
+  | "PERCENT"
   | "CARET"
   | "EQ"
   | "EQEQ"
@@ -64,6 +66,7 @@ export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
   RANGE: "RANGE",
   FN: "FN",
   as: "AS",
+  of: "OF",
   if: "IF",
   then: "THEN",
   else: "ELSE",

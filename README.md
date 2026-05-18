@@ -76,6 +76,24 @@ anonymous one-offs.
 2 kg flour                          # var_decl, but in expression position it'd be a quantity literal
 ```
 
+**Percentages.** Postfix `%` turns any primary expression into a fraction
+(`20%` = 0,20). `of` is a multiplication synonym that reads naturally —
+`20% of 1000` = 200. Two contextual rules:
+
+```calc
+100 + 20%                           # = 120  (Soulver-style: scale left by 1+p)
+1000 - 13%                          # = 870
+100 rub + 15%                       # = 115 rub
+20% + 30%                           # = 50%  (both percents → percent)
+20% of 50%                          # = 10%  (combine rates)
+20% of 1000                         # = 200  (mixed → plain)
+(1 + rate%)^years                   # rate% coerces to fraction in arithmetic
+```
+
+When both operands of `+`/`-` are percents, the result is a percent.
+`<Quantity> ± <Percent>` is the Soulver "of left" rule. Everywhere else
+percent silently collapses into its dimensionless fraction.
+
 **Series and ranges.** Both are iterable collections with the same
 aggregate methods (`.sum`, `.avg`, `.count`, `.min`, `.max`).
 
@@ -177,4 +195,5 @@ stage 4  units & quantities    DimensionVector + Quantity arithmetic
 stage 5  evaluator              lazy env + Soulver-style annotated output
 stage 6  REPL                   persistent env, colored diagnostics
 stage 7  polish                 unit-name canonicalization, suggestions, golden tests
+stage 8  percent                postfix '%' literal, 'of' operator, Soulver-style +/- rule
 ```

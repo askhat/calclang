@@ -2,7 +2,13 @@ import Decimal from "decimal.js"
 import type { Diagnostic } from "../errors/diagnostic.ts"
 import type { RangeValue } from "../eval/collection.ts"
 import type { RunResult } from "../eval/evaluator.ts"
-import { isBoolean, isQuantity, isRange, type Value } from "../eval/value.ts"
+import {
+  isBoolean,
+  isPercent,
+  isRange,
+  type Percent,
+  type Value,
+} from "../eval/value.ts"
 import type { Quantity } from "../units/quantity.ts"
 import { bold, gray, red, yellow } from "./color.ts"
 
@@ -61,12 +67,19 @@ export function formatRange(r: RangeValue, locale: Locale = DEFAULT_LOCALE): str
   return `${start}${sep}${end}${step} (n=${r.members.length})`
 }
 
+export function formatPercent(p: Percent, locale: Locale = DEFAULT_LOCALE): string {
+  // Internal fraction (0,20) → displayed percentage (20%). The trailing
+  // '%' is part of the value, not a separator.
+  return `${formatDecimal(p.value.times(100), locale)}%`
+}
+
 export function formatValue(
   v: Value,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (isBoolean(v)) return v ? "true" : "false"
   if (isRange(v)) return formatRange(v, locale)
+  if (isPercent(v)) return formatPercent(v, locale)
   return formatQuantity(v, locale)
 }
 

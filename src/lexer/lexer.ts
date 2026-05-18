@@ -17,6 +17,7 @@ const SINGLE_CHAR: Readonly<Record<string, TokenKind>> = {
   "-": "MINUS",
   "*": "STAR",
   "/": "SLASH",
+  "%": "PERCENT",
   "^": "CARET",
   "(": "LPAREN",
   ")": "RPAREN",

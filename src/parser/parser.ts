@@ -53,6 +53,7 @@ const BINARY_OPS: ReadonlyMap<TokenKind, BinaryEntry> = new Map([
   ["MINUS", { prec: 5, assoc: "left", op: "sub" }],
   ["STAR", { prec: 6, assoc: "left", op: "mul" }],
   ["SLASH", { prec: 6, assoc: "left", op: "div" }],
+  ["OF", { prec: 6, assoc: "left", op: "of" }],
 ])
 
 const KIND_NAMES: Partial<Record<TokenKind, string>> = {
@@ -754,17 +755,26 @@ class Parser {
   private parseConversion(): Expr | null {
     let expr = this.parsePrimary()
     if (!expr) return null
-    // Property access binds tighter than `as`: `foo.sum as kzt` parses as
-    // `(foo.sum) as kzt`. Chained: `a.b.c` → ((a.b).c).
-    while (this.peek().kind === "DOT") {
-      const dotTok = this.advance()
-      const propTok = this.expect("IDENT")
-      if (!propTok) return null
-      expr = {
-        type: "property",
-        target: expr,
-        property: propTok.lexeme,
-        pos: pos(dotTok),
+    // Property access and postfix `%` both bind tighter than `as`. Loop to
+    // allow chains like `series.sum%` or `5%.sum` (the latter is meaningless
+    // and errors at eval, but the parser stays uniform).
+    while (true) {
+      const k = this.peek().kind
+      if (k === "DOT") {
+        const dotTok = this.advance()
+        const propTok = this.expect("IDENT")
+        if (!propTok) return null
+        expr = {
+          type: "property",
+          target: expr,
+          property: propTok.lexeme,
+          pos: pos(dotTok),
+        }
+      } else if (k === "PERCENT") {
+        const pctTok = this.advance()
+        expr = { type: "percent", expr, pos: pos(pctTok) }
+      } else {
+        break
       }
     }
     if (this.peek().kind === "AS") {

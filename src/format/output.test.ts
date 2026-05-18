@@ -88,6 +88,24 @@ describe("formatValue", () => {
   test("quantity", () => {
     expect(formatValue({ value: new Decimal(5), unit: kg })).toBe("5 kg")
   })
+
+  test("percent renders as N% (fraction × 100)", () => {
+    expect(formatValue({ kind: "percent", value: new Decimal("0.2") })).toBe(
+      "20%",
+    )
+  })
+
+  test("percent with fractional display", () => {
+    expect(
+      formatValue({ kind: "percent", value: new Decimal("0.125") }),
+    ).toBe("12,5%")
+  })
+
+  test("negative percent", () => {
+    expect(formatValue({ kind: "percent", value: new Decimal("-0.05") })).toBe(
+      "-5%",
+    )
+  })
 })
 
 describe("annotateSource (end-to-end)", () => {

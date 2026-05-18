@@ -147,6 +147,38 @@ SERIES temps
 FN scaled(k) temps.sum * k
 scaled(2)
 
+# ─── Percentages ────────────────────────────────────────────────────────
+# Постфикс '%' превращает любой primary в долю: 20% = 0,20.
+# Правила:
+#   Quantity ± Percent       — Soulver-style: масштабирует левый на 1±p.
+#                              \`100 rub + 15%\` = 115 rub.
+#   Percent ± Percent        — складывает доли, остаётся процентом.
+#                              \`20% + 30%\` = 50%.
+#   Percent op Percent       — для */of возвращает процент, для / — отношение.
+#   с обычным числом/юнитом — процент приводится к доле автоматически.
+#   'of' — синоним '*', читается как «процент от значения».
+
+20%                                              # bare percent
+(1 + 2)%                                         # postfix на скобках
+12,5%                                            # дробный процент
+
+20% of 1000                                      # = 200
+20% of 500 usd                                   # = 100 usd
+20% + 30%                                        # = 50%
+20% of 50%                                       # = 10% (доля доли)
+
+# Маленькие реальные кейсы:
+1_000 usd subtotal
+subtotal + 20% = withVat                         # цена с НДС 20%
+withVat - subtotal                               # сам НДС в usd
+
+2_000 listPrice
+listPrice - 30%                                  # после скидки 30%
+
+1_250 bill
+bill + 18% = withTip                             # счёт + 18% чаевые
+withTip - bill                                   # сами чаевые
+
 # ─── Real-world: mortgage calculator ────────────────────────────────────
 # Pull it all together — units + variables + assignments + FN + named-member
 # series. Cost of an apartment, down payment, annuity, overpay, and a
@@ -158,11 +190,13 @@ apartmentPrice - downPayment = loanAmount        # сколько брать в 
 240 termMonths                                    # срок 20 лет
 
 # Аннуитетный платёж: P · r · (1+r)^n / ((1+r)^n − 1), где r = annual / 12.
+# annual — годовая ставка как процент; в формуле приводится к доле.
 FN payment(p, annual, n) p * (annual / 12) * (1 + annual / 12) ^ n / ((1 + annual / 12) ^ n - 1)
 
-payment(loanAmount, 0,18, termMonths) = monthlyPayment
+payment(loanAmount, 18%, termMonths) = monthlyPayment
 monthlyPayment * termMonths = totalPayments
 totalPayments - loanAmount = overpayment         # переплата банку
+overpayment / loanAmount                         # переплата как доля — посчитай %!
 
 loanAmount as usd                                # та же сумма в долларах
 monthlyPayment as usd
@@ -170,10 +204,10 @@ overpayment as usd
 
 # Сценарии разных ставок — series с FN-вызовами в членах:
 SERIES scenarios
-payment(loanAmount, 0,12, termMonths) dream
-payment(loanAmount, 0,14, termMonths) good
-payment(loanAmount, 0,16, termMonths) okRate
-payment(loanAmount, 0,18, termMonths) baseRate
+payment(loanAmount, 12%, termMonths) dream
+payment(loanAmount, 14%, termMonths) good
+payment(loanAmount, 16%, termMonths) okRate
+payment(loanAmount, 18%, termMonths) baseRate
 
 scenarios.dream                                  # платёж при 12%
 scenarios.baseRate                               # платёж при 18%
@@ -194,9 +228,14 @@ SERIES week                                       # часы по дням
 5 h fri
 
 week.sum                                          # часов всего
-week.sum * hourlyRate                             # доход за неделю
-week.sum * hourlyRate * 4                         # ~доход за месяц
+week.sum * hourlyRate = weekIncome                # доход за неделю
+weekIncome * 4                                    # ~доход за месяц
 week.avg                                          # средняя длина рабочего дня
+
+# Налоги и комиссии — проценты прямо в строке:
+weekIncome - 13%                                  # после НДФЛ 13%
+weekIncome * 4 - 13% - 1% = monthlyNet            # минус НДФЛ и комиссия платформы
+monthlyNet as rub                                 # в рублях
 
 # ─── Real-world: team velocity & forecast ───────────────────────────────
 # Story points за каждый спринт — series; средняя → прогноз → срок бэклога.
@@ -241,6 +280,32 @@ tripBudget.sum as try                             # …в лирах
 # План: сколько откладывать с зарплаты, чтобы поехать через N месяцев
 600_000 kzt monthlySaving
 tripBudget.sum / monthlySaving                    # месяцев копить
+
+# А если на отель будет early-bird скидка 15%?
+60 usd * nights - 15%                             # экономия от ранней брони
+
+# ─── Roadmap: coming soon ───────────────────────────────────────────────
+# Эти фичи в разработке (см. Stage 9+ в /Users/askhat/.claude/plans).
+# Синтаксис ниже — преview, в нынешней версии работать не будет.
+#
+# Даты и длительности — Stage 9:
+#   2026-05-18 startDate
+#   2026-12-31 - startDate as days        # сколько дней до конца года
+#   today + 30 days = deadline            # дата дедлайна
+#   3 weeks + 2 days as days              # = 23 days
+#
+# Линейные ссылки / running totals — Stage 10:
+#   SECTION cart
+#   100 rub coffee
+#   50 rub bus
+#   800 rub groceries
+#   sum of cart                           # = 950 rub
+#
+# Math-функции и precision — Stage 11:
+#   sqrt(16)                              # = 4
+#   abs(-3 kg)                            # = 3 kg
+#   round(1,234567, 2)                    # = 1,23
+#   # precision 2                          # глобально 2 знака после запятой
 
 # ─── Tips ───────────────────────────────────────────────────────────────
 # • Alt+↑ / Alt+↓ on a number nudges it.

@@ -34,6 +34,7 @@ export type Expr =
   | Identifier
   | UnaryExpr
   | BinaryExpr
+  | PercentExpr
   | IfExpr
   | ConversionExpr
   | PropertyAccess
@@ -76,6 +77,7 @@ export type BinaryOp =
   | "sub"
   | "mul"
   | "div"
+  | "of"
   | "pow"
 
 export type BinaryExpr = {
@@ -83,6 +85,18 @@ export type BinaryExpr = {
   op: BinaryOp
   left: Expr
   right: Expr
+  pos: Position
+}
+
+/**
+ * Postfix `%` applied to a primary expression. Evaluates to a `Percent` value
+ * (fraction = inner / 100). Soulver-style: in `+`/`-` against a quantity it
+ * applies relative to that quantity; otherwise it behaves as a dimensionless
+ * number (fraction).
+ */
+export type PercentExpr = {
+  type: "percent"
+  expr: Expr
   pos: Position
 }
 
@@ -265,6 +279,8 @@ export function showExpr(e: Expr): string {
       return `(${e.op} ${showExpr(e.operand)})`
     case "binary":
       return `(${e.op} ${showExpr(e.left)} ${showExpr(e.right)})`
+    case "percent":
+      return `(percent ${showExpr(e.expr)})`
     case "if":
       return `(if ${showExpr(e.cond)} ${showExpr(e.then)} ${showExpr(e.else)})`
     case "conversion":

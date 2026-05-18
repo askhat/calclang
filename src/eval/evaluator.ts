@@ -30,7 +30,19 @@ import {
   type SeriesValue,
 } from "./collection.ts"
 import { EvalError } from "./errors.ts"
-import { asBoolean, asQuantity, isRange, type Value } from "./value.ts"
+import {
+  additiveWithPercent,
+  multiplicativeWithPercent,
+  negatePercent,
+  percentFromDisplay,
+} from "./percent.ts"
+import {
+  asBoolean,
+  asQuantity,
+  isPercent,
+  isRange,
+  type Value,
+} from "./value.ts"
 
 // Re-exports for backward compatibility with frontend/calc-engine.ts and any
 // out-of-tree consumers that imported these directly from evaluator.
@@ -75,6 +87,8 @@ const BINARY: Partial<Record<BinaryOp, BinaryHandler>> = {
   sub: Q.sub,
   mul: Q.mul,
   div: Q.div,
+  // `of` is multiplication semantically; reading aid for percentages.
+  of: Q.mul,
   pow: Q.pow,
   eq: Q.eq,
   neq: Q.neq,
@@ -541,11 +555,36 @@ export class Evaluator {
         if (expr.op === "not") {
           return !asBoolean(this.evalExpr(expr.operand), expr.operand.pos)
         }
-        const operand = asQuantity(
-          this.evalExpr(expr.operand),
-          expr.operand.pos,
-        )
+        const raw = this.evalExpr(expr.operand)
+        // Preserve percent-ness through unary +/-: -20% should stay a percent.
+        if (isPercent(raw)) {
+          return expr.op === "neg" ? negatePercent(raw) : raw
+        }
+        const operand = asQuantity(raw, expr.operand.pos)
         return expr.op === "neg" ? Q.neg(operand) : operand
+      }
+      case "percent": {
+        // The `expr%` postfix: inner is the displayed percentage (20 for 20%).
+        // Internally we store the fraction (0,20). Inner must be a plain
+        // dimensionless number — a unit-bearing quantity or a chained percent
+        // is nonsense and rejected.
+        const innerVal = this.evalExpr(expr.expr)
+        if (isPercent(innerVal)) {
+          throw new EvalError(
+            `'%' applied to a value that is already a percent`,
+            expr.pos,
+            "drop one '%' — `5%%` is not meaningful",
+          )
+        }
+        const inner = asQuantity(innerVal, expr.expr.pos)
+        if (inner.unit) {
+          throw new EvalError(
+            `'%' requires a dimensionless number, got ${inner.unit.name}`,
+            expr.pos,
+            "percent is just a fraction; '5 rub%' has no sensible meaning",
+          )
+        }
+        return percentFromDisplay(inner.value)
       }
       case "binary": {
         if (expr.op === "and") {
@@ -562,8 +601,19 @@ export class Evaluator {
         if (!handler) {
           throw new EvalError(`unhandled binary op '${expr.op}'`, expr.pos)
         }
-        const left = asQuantity(this.evalExpr(expr.left), expr.left.pos)
-        const right = asQuantity(this.evalExpr(expr.right), expr.right.pos)
+        // Percent-aware fast paths for additive and multiplicative ops.
+        const leftRaw = this.evalExpr(expr.left)
+        const rightRaw = this.evalExpr(expr.right)
+        if (expr.op === "add" || expr.op === "sub") {
+          const pct = additiveWithPercent(leftRaw, rightRaw, expr.op)
+          if (pct !== null) return pct
+        }
+        if (expr.op === "mul" || expr.op === "div" || expr.op === "of") {
+          const pct = multiplicativeWithPercent(leftRaw, rightRaw, expr.op)
+          if (pct !== null) return pct
+        }
+        const left = asQuantity(leftRaw, expr.left.pos)
+        const right = asQuantity(rightRaw, expr.right.pos)
         try {
           return handler(left, right)
         } catch (err) {

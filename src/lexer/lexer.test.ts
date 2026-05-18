@@ -114,6 +114,7 @@ describe("identifiers and keywords", () => {
     const cases: Array<[string, TokenKind]> = [
       ["UNIT", "UNIT"],
       ["as", "AS"],
+      ["of", "OF"],
       ["if", "IF"],
       ["then", "THEN"],
       ["else", "ELSE"],
@@ -145,16 +146,29 @@ describe("identifiers and keywords", () => {
 
 describe("operators and punctuation", () => {
   test("single-char operators", () => {
-    expect(kinds("+ - * / ^ ( ) ? :")).toEqual([
+    expect(kinds("+ - * / % ^ ( ) ? :")).toEqual([
       "PLUS",
       "MINUS",
       "STAR",
       "SLASH",
+      "PERCENT",
       "CARET",
       "LPAREN",
       "RPAREN",
       "QUESTION",
       "COLON",
+      "EOF",
+    ])
+  })
+
+  test("percent token, adjacent and spaced", () => {
+    expect(kinds("20%")).toEqual(["NUMBER", "PERCENT", "EOF"])
+    expect(kinds("20 %")).toEqual(["NUMBER", "PERCENT", "EOF"])
+    expect(kinds("(a)%")).toEqual([
+      "LPAREN",
+      "IDENT",
+      "RPAREN",
+      "PERCENT",
       "EOF",
     ])
   })
