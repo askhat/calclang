@@ -19,7 +19,8 @@ function lastValue(results: RunResult[]): string {
     const sep = r.value.inclusive ? ".." : "..."
     const fmt = (q: { value: import("decimal.js").default; unit: { name: string } | null }) =>
       q.unit ? `${q.value.toString()} ${q.unit.name}` : q.value.toString()
-    return `${fmt(r.value.start)}${sep}${fmt(r.value.end)} (n=${r.value.members.length})`
+    const step = r.value.step.eq(1) ? "" : `/${r.value.step.toString()}`
+    return `${fmt(r.value.start)}${sep}${fmt(r.value.end)}${step} (n=${r.value.members.length})`
   }
   if (isQuantity(r.value)) {
     return r.value.unit
@@ -205,6 +206,87 @@ describe("Range — error paths", () => {
   })
 })
 
+describe("Range — custom step (`/step`)", () => {
+  test("`1..10/1` matches default behavior", () => {
+    expect(lastValue(run("1..10/1 r\nr.count").results)).toBe("10")
+    expect(lastValue(run("1..10/1 r\nr.sum").results)).toBe("55")
+  })
+
+  test("`1..10/3` → {1, 3, 6, 9} (sum 19)", () => {
+    expect(lastValue(run("1..10/3 r\nr.count").results)).toBe("4")
+    expect(lastValue(run("1..10/3 r\nr.sum").results)).toBe("19")
+  })
+
+  test("`1..10/5` → {1, 5, 10} (sum 16)", () => {
+    expect(lastValue(run("1..10/5 r\nr.count").results)).toBe("3")
+    expect(lastValue(run("1..10/5 r\nr.sum").results)).toBe("16")
+  })
+
+  test("`1..10/100` inclusive → {1} (start anchor only)", () => {
+    expect(lastValue(run("1..10/100 r\nr.count").results)).toBe("1")
+  })
+
+  test("`1...10/100` exclusive → {} (start dropped, no inner multiples)", () => {
+    expect(lastValue(run("1...10/100 r\nr.count").results)).toBe("0")
+  })
+
+  test("`10..1/1` reverse → {10, 9, …, 1}", () => {
+    expect(lastValue(run("10..1/1 r\nr.count").results)).toBe("10")
+    expect(lastValue(run("10..1/1 r\nr.sum").results)).toBe("55")
+  })
+
+  test("reverse with step: `10..1/3` → {10, 9, 6, 3} (start anchor + desc multiples)", () => {
+    expect(lastValue(run("10..1/3 r\nr.count").results)).toBe("4")
+    expect(lastValue(run("10..1/3 r\nr.sum").results)).toBe("28")
+  })
+
+  test("negative endpoints with step: `-3..3/3` → {-3, 0, 3}", () => {
+    expect(lastValue(run("-3..3/3 r\nr.count").results)).toBe("3")
+    expect(lastValue(run("-3..3/3 r\nr.sum").results)).toBe("0")
+  })
+
+  test("step as expression: `1..10/(1+2)` parses and evaluates", () => {
+    expect(lastValue(run("1..10/(1 + 2) r\nr.count").results)).toBe("4")
+  })
+
+  test("step = 0 is a diagnostic", () => {
+    const { diagnostics } = run("1..10/0 r\nr.count")
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]?.message.toLowerCase()).toContain("step")
+  })
+
+  test("negative step is a diagnostic", () => {
+    const { diagnostics } = run("1..10/-2 r\nr.count")
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]?.message.toLowerCase()).toContain("step")
+  })
+
+  test("step with units: `1 usd..10 usd / 2`", () => {
+    const src = ["UNIT Currency usd", "1 usd..10 usd / 2 r", "r.count"].join("\n")
+    // anchor 1, multiples of 2 in (1, 10]: 2, 4, 6, 8, 10. Total 6.
+    expect(lastValue(run(src).results)).toBe("6")
+  })
+
+  test("RANGE keyword + step (`RANGE r 1 10 3`)", () => {
+    expect(lastValue(run("RANGE r 1 10 3\nr.count").results)).toBe("4")
+    expect(lastValue(run("RANGE r 1 10 3\nr.sum").results)).toBe("19")
+  })
+
+  test("paren-forced division inside end: `1..(10/3)` → range(1, 3.33…)", () => {
+    // No /step modifier; end is 10/3. snap step=1 from 1: anchor 1,
+    // multiples of 1 in (1, 10/3]: 2, 3. Members = {1, 2, 3}.
+    expect(lastValue(run("1..(10/3) r\nr.count").results)).toBe("3")
+  })
+
+  test("annotation shows /step when non-default", () => {
+    expect(lastValue(run("1..10/3").results)).toBe("1..10/3 (n=4)")
+  })
+
+  test("annotation omits /step for default step 1", () => {
+    expect(lastValue(run("1..10").results)).toBe("1..10 (n=10)")
+  })
+})
+
 describe("Range — units", () => {
   test("`1 usd..10 usd` → 10 members in usd, sum 55 usd", () => {
     const src = ["UNIT Currency usd", "1 usd..10 usd r", "r.sum"].join("\n")
@@ -232,8 +314,8 @@ describe("Range — units", () => {
   })
 
   test("mixed-unit same dim: end's unit wins, start is converted", () => {
-    // 100 rub = 100/90.5 ≈ 1.1050 usd. Ascending. Members: 1.105, 2.105,
-    // 3.105, 4.105 (next 5.105 > 5). count=4, sum = 4*1.105 + 6 = 10.42 usd.
+    // 100 rub = 100/90.5 ≈ 1.1050 usd. Snap step=1: anchor 1.1050, then
+    // multiples of 1 in (1.105, 5]: 2, 3, 4, 5. Members = 5.
     const src = [
       "UNIT Currency usd",
       "UNIT (usd / 90,5) rub",
@@ -242,7 +324,7 @@ describe("Range — units", () => {
     ].join("\n")
     const { results, diagnostics } = run(src)
     expect(diagnostics).toEqual([])
-    expect(lastValue(results)).toBe("4")
+    expect(lastValue(results)).toBe("5")
   })
 
   test("reverse with units: `10 usd..1 usd` walks down → sum 55 usd", () => {

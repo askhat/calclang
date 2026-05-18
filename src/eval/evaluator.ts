@@ -688,11 +688,12 @@ export class Evaluator {
         }
       }
       case "range": {
-        const startV = this.evalExpr(expr.start)
-        const startQ = asQuantity(startV, expr.start.pos)
-        const endV = this.evalExpr(expr.end)
-        const endQ = asQuantity(endV, expr.end.pos)
-        return materializeRange(startQ, endQ, expr.inclusive, expr.pos)
+        const startQ = asQuantity(this.evalExpr(expr.start), expr.start.pos)
+        const endQ = asQuantity(this.evalExpr(expr.end), expr.end.pos)
+        const stepQ = expr.step
+          ? asQuantity(this.evalExpr(expr.step), expr.step.pos)
+          : null
+        return materializeRange(startQ, endQ, stepQ, expr.inclusive, expr.pos)
       }
     }
   }
@@ -799,7 +800,10 @@ export class Evaluator {
       const r = original.decl.range
       const startQ = asQuantity(this.evalExpr(r.start), r.start.pos)
       const endQ = asQuantity(this.evalExpr(r.end), r.end.pos)
-      const value = materializeRange(startQ, endQ, r.inclusive, r.pos)
+      const stepQ = r.step
+        ? asQuantity(this.evalExpr(r.step), r.step.pos)
+        : null
+      const value = materializeRange(startQ, endQ, stepQ, r.inclusive, r.pos)
       this.rangeEnv.set(name, { state: "ready", value })
       return value
     } catch (err) {

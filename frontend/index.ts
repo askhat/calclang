@@ -87,22 +87,31 @@ budget.bonus
 budget.sum
 
 # ─── Ranges ─────────────────────────────────────────────────────────────
-# Iterable with monotonic step 1.
-#   <start>..<end>  — inclusive    (1..10 → 1, 2, ..., 10)
-#   <start>...<end> — exclusive    (1...10 → 1, 2, ..., 9)
-#   <start>..<end> <name>          — bind a name (like a series)
-#   RANGE <name> <start> <end>     — keyword form (inclusive only)
-# Same aggregates as SERIES: .sum .avg .count .min .max
-# start > end walks down. Decimal endpoints OK; units flow through.
+# Iterable with snap-to-multiples semantics:
+#   <start>..<end>[/<step>]   — inclusive (1..10 → 1, 2, ..., 10)
+#   <start>...<end>[/<step>]  — exclusive (1...10 → 1, 2, ..., 9)
+#   <range> <name>            — bind a name (like a series)
+#   RANGE <name> <start> <end> [<step>]   — keyword form (inclusive)
+# Default step is 1. start is always anchored; then multiples of step
+# within (start, end]. Exclusive drops start too when no inner multiples.
+# start > end walks down. Same aggregates as SERIES: .sum .avg .count .min .max
 
 1..10 onesToTen
 onesToTen.sum
 onesToTen.avg
 
-1...5             # bare exclusive range — annotation shows count
+1...5             # bare exclusive range
 
 10..1 down        # reverse direction
 down.sum
+
+# Custom step: 1, 3, 6, 9 (start + multiples of 3 up to 10)
+1..10/3 byThree
+byThree.sum
+
+# Step larger than the gap
+1..10/100         # inclusive → just the anchor {1}
+1...10/100        # exclusive → empty {}
 
 RANGE prices 1 usd 10 usd
 prices.sum

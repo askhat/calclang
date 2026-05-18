@@ -94,6 +94,41 @@ describe("range trailing-name declaration", () => {
   })
 })
 
+describe("range step (`/step`)", () => {
+  test("`1..10/5` → range with step 5", () => {
+    expect(show("1..10/5")).toBe("(range 1 10 /5)")
+  })
+
+  test("`1...10/3` (exclusive) with step", () => {
+    expect(show("1...10/3")).toBe("(range-excl 1 10 /3)")
+  })
+
+  test("step is parsed at conditional level (`/(1+2)`)", () => {
+    expect(show("1..10/(1+2)")).toBe("(range 1 10 /(add 1 2))")
+  })
+
+  test("end parsing stops at top-level `/`: `1..10*3/2`", () => {
+    // 10*3 belongs to end (mul keeps), then /2 is step.
+    expect(show("1..10 * 3 / 2")).toBe("(range 1 (mul 10 3) /2)")
+  })
+
+  test("paren-forced division inside end: `1..(10/3)`", () => {
+    expect(show("1..(10 / 3)")).toBe("(range 1 (div 10 3))")
+  })
+
+  test("`1..10/3 myRange` → range decl with step", () => {
+    const { program, diagnostics } = parse("1..10/3 myRange")
+    expect(diagnostics).toEqual([])
+    expect(showStatement(program.statements[0]!)).toBe(
+      "(range-decl myRange (range 1 10 /3))",
+    )
+  })
+
+  test("range without step still parses (step is optional)", () => {
+    expect(show("1..10")).toBe("(range 1 10)")
+  })
+})
+
 describe("RANGE keyword form", () => {
   test("`RANGE myRange 1 10` → inclusive rangeDecl", () => {
     const { program, diagnostics } = parse("RANGE myRange 1 10")
@@ -107,6 +142,13 @@ describe("RANGE keyword form", () => {
     const { program } = parse("RANGE foo (1 + 2) (3 * 4)")
     expect(showStatement(program.statements[0]!)).toBe(
       "(range-decl foo (range (add 1 2) (mul 3 4)))",
+    )
+  })
+
+  test("RANGE with step as 4th arg", () => {
+    const { program } = parse("RANGE foo 1 10 3")
+    expect(showStatement(program.statements[0]!)).toBe(
+      "(range-decl foo (range 1 10 /3))",
     )
   })
 

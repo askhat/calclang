@@ -34,6 +34,8 @@ export interface RangeValue extends Collection {
   readonly start: Quantity
   readonly end: Quantity
   readonly inclusive: boolean
+  /** Step value in the range unit. Always positive. Default 1. */
+  readonly step: Decimal
 }
 
 export const AGGREGATE_METHODS = new Set([
@@ -148,56 +150,104 @@ const MAX_RANGE_MEMBERS = 100_000
 
 /**
  * Materialize a range literal into a `RangeValue`.
- * - Step is always ±1 *in the range unit*; direction is `+1` when start ≤
- *   end (after conversion to the range unit), else `-1`.
- * - Decimal endpoints OK; step stays 1 so `1,5..5,5` is 1.5–5.5.
- * - `inclusive` includes both endpoints when reachable; exclusive stops one
- *   step short of `end`.
- * - With units: the range unit is the END's unit (last explicit, mirroring
- *   the series rule). A dimensionless endpoint is promoted into the range
- *   unit; a same-dim differently-unit endpoint is converted; mismatched
- *   dimensions throw via `Q.convert`.
+ *
+ * Semantics (snap-to-multiples):
+ *   - `start` is always anchored (always emitted for inclusive).
+ *   - After `start`, append every multiple of `step` strictly between
+ *     `start` and `end` — including `end` for inclusive `..`, excluding it
+ *     for exclusive `...`.
+ *   - For exclusive: if no such multiples exist (step jumps past `end`),
+ *     `start` is also omitted, giving an empty range.
+ *   - Direction is determined by `start <= end` (after conversion into the
+ *     range unit). For descending, "multiples between" walks downward.
+ *
+ * Examples (with implicit step 1 unless given):
+ *   1..10        → {1, 2, …, 10}
+ *   1..10/5      → {1, 5, 10}
+ *   1..10/3      → {1, 3, 6, 9}
+ *   1..10/100    → {1}             (step jumps past end; start anchors)
+ *   1...10/100   → {}              (exclusive: start dropped too)
+ *   10..1/1      → {10, 9, …, 1}
+ *
+ * Units: the range unit is end's unit (last explicit, mirroring series).
+ * Endpoints with same dim get converted; dimensionless promote; mismatched
+ * dimensions throw via `Q.convert`. Step's unit, if provided, must match
+ * (or be dimensionless) and is converted to the range unit.
  */
 export function materializeRange(
   start: Quantity,
   end: Quantity,
+  step: Quantity | null,
   inclusive: boolean,
   pos: Position,
 ): RangeValue {
   const rangeUnit: Unit | null = end.unit ?? start.unit ?? null
   const startValue = valueIn(start, rangeUnit, pos)
   const endValue = valueIn(end, rangeUnit, pos)
+  const stepValue = step === null ? new Decimal(1) : valueIn(step, rangeUnit, pos)
+
+  if (stepValue.lte(0)) {
+    throw new EvalError(
+      `range step must be positive, got ${stepValue.toString()}`,
+      pos,
+      "direction is inferred from start vs end; step is always positive",
+    )
+  }
 
   const ascending = startValue.lte(endValue)
-  const step = ascending ? new Decimal(1) : new Decimal(-1)
+  const insideMultiples: Decimal[] = []
 
-  const members: Quantity[] = []
-  let i = startValue
-  while (true) {
-    const cmp = i.cmp(endValue)
-    const stop = ascending
-      ? inclusive
-        ? cmp > 0
-        : cmp >= 0
-      : inclusive
-        ? cmp < 0
-        : cmp <= 0
-    if (stop) break
-    members.push({ value: i, unit: rangeUnit })
-    if (members.length > MAX_RANGE_MEMBERS) {
-      throw new EvalError(
-        `range too large (>${MAX_RANGE_MEMBERS} members)`,
-        pos,
-        "narrow the bounds; current step is fixed at 1",
-      )
+  if (ascending) {
+    // First multiple of step strictly greater than start.
+    let i = startValue.div(stepValue).floor().plus(1).times(stepValue)
+    while (true) {
+      const cmp = i.cmp(endValue)
+      const stop = inclusive ? cmp > 0 : cmp >= 0
+      if (stop) break
+      insideMultiples.push(i)
+      if (insideMultiples.length > MAX_RANGE_MEMBERS) {
+        throw new EvalError(
+          `range too large (>${MAX_RANGE_MEMBERS} members)`,
+          pos,
+          "narrow the bounds or use a larger step",
+        )
+      }
+      i = i.plus(stepValue)
     }
-    i = i.plus(step)
+  } else {
+    // First multiple of step strictly less than start (walking down).
+    let i = startValue.div(stepValue).ceil().minus(1).times(stepValue)
+    while (true) {
+      const cmp = i.cmp(endValue)
+      const stop = inclusive ? cmp < 0 : cmp <= 0
+      if (stop) break
+      insideMultiples.push(i)
+      if (insideMultiples.length > MAX_RANGE_MEMBERS) {
+        throw new EvalError(
+          `range too large (>${MAX_RANGE_MEMBERS} members)`,
+          pos,
+          "narrow the bounds or use a larger step",
+        )
+      }
+      i = i.minus(stepValue)
+    }
+  }
+
+  // Inclusive always anchors start; exclusive anchors start only when at
+  // least one in-range multiple exists.
+  const members: Quantity[] = []
+  if (inclusive || insideMultiples.length > 0) {
+    members.push({ value: startValue, unit: rangeUnit })
+    for (const m of insideMultiples) {
+      members.push({ value: m, unit: rangeUnit })
+    }
   }
 
   return {
     kind: "range",
     start,
     end,
+    step: stepValue,
     inclusive,
     members,
     dimension: rangeUnit?.dimension ?? {},

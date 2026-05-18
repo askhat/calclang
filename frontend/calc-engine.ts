@@ -26,6 +26,8 @@ export type RangeSummary = {
   /** Source endpoints, for display ("1..10", "1...10"). */
   start: Quantity
   end: Quantity
+  /** Step in the range unit. Always positive; default is 1. */
+  step: import("decimal.js").default
   inclusive: boolean
   count: number
   sum: Quantity | null
@@ -112,6 +114,7 @@ export function runPipeline(source: string): EngineRun {
         name,
         start: value.start,
         end: value.end,
+        step: value.step,
         inclusive: value.inclusive,
         count: value.members.length,
         sum: agg("sum"),

@@ -57,7 +57,8 @@ export function formatRange(r: RangeValue, locale: Locale = DEFAULT_LOCALE): str
   const sep = r.inclusive ? ".." : "..."
   const start = formatQuantity(r.start, locale)
   const end = formatQuantity(r.end, locale)
-  return `${start}${sep}${end} (n=${r.members.length})`
+  const step = r.step.eq(1) ? "" : `/${formatDecimal(r.step, locale)}`
+  return `${start}${sep}${end}${step} (n=${r.members.length})`
 }
 
 export function formatValue(

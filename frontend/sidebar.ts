@@ -103,7 +103,8 @@ function renderRanges(run: EngineRun): void {
     const name = document.createElement("span")
     name.className = "kv-name"
     const sep = r.inclusive ? ".." : "..."
-    name.textContent = `${r.name} = ${formatValue(r.start)}${sep}${formatValue(r.end)}`
+    const step = r.step.eq(1) ? "" : `/${r.step.toString().replace(".", ",")}`
+    name.textContent = `${r.name} = ${formatValue(r.start)}${sep}${formatValue(r.end)}${step}`
     const count = document.createElement("span")
     count.className = "kv-value"
     count.textContent = `n=${r.count}`

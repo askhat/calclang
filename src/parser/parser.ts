@@ -160,9 +160,9 @@ class Parser {
   }
 
   /**
-   * `RANGE <name> <start> <end>` — inclusive only (the keyword form). The
-   * `<start>` and `<end>` are conditional-level expressions (no top-level
-   * `..` inside, to keep the form unambiguous).
+   * `RANGE <name> <start> <end> [<step>]` — inclusive only. Endpoints and
+   * step are conditional-level expressions. Step is optional (defaults to 1
+   * at eval time).
    */
   private parseRangeDeclKeyword(): RangeDecl | null {
     const rangeTok = this.advance() // 'RANGE'
@@ -172,10 +172,17 @@ class Parser {
     if (!start) return null
     const end = this.parseConditional()
     if (!end) return null
+    let step: Expr | undefined
+    if (!this.isLineEnd(this.peek())) {
+      const stepExpr = this.parseConditional()
+      if (!stepExpr) return null
+      step = stepExpr
+    }
     const range: RangeLit = {
       type: "range",
       start,
       end,
+      step,
       inclusive: true,
       pos: pos(rangeTok),
     }
@@ -607,7 +614,10 @@ class Parser {
   /**
    * Top of the expression grammar. Range (`..` / `...`) sits above the
    * conditional/binary stack so endpoints are full expressions and
-   * `(1+2)..(3*4)` parses without parens.
+   * `(1+2)..(3*4)` parses without parens. An optional `/<step>` suffix
+   * follows the end; the end itself is parsed without consuming a top-level
+   * `/` so that `1..10/3` cleanly means `range(1, 10) step 3` (not
+   * `1..(10/3)`). To divide inside an endpoint, wrap in parens: `1..(10/3)`.
    */
   private parseExpressionRule(): Expr | null {
     const left = this.parseConditional()
@@ -615,13 +625,53 @@ class Parser {
     const k = this.peek().kind
     if (k === "DOTDOT" || k === "DOTDOTDOT") {
       const opTok = this.advance()
-      const right = this.parseConditional()
+      const right = this.parseRangeEnd()
       if (!right) return null
+      let step: Expr | undefined
+      if (this.peek().kind === "SLASH") {
+        this.advance()
+        const stepExpr = this.parseConditional()
+        if (!stepExpr) return null
+        step = stepExpr
+      }
       return {
         type: "range",
         start: left,
         end: right,
+        step,
         inclusive: opTok.kind === "DOTDOT",
+        pos: pos(opTok),
+      }
+    }
+    return left
+  }
+
+  /**
+   * Range-end production: full conditional/binary parsing but stops at a
+   * top-level `/` so that `1..a*b/c` reads as `range(1, a*b) step c`. To
+   * divide inside an endpoint, use parens.
+   */
+  private parseRangeEnd(): Expr | null {
+    return this.parseBinaryRangeEnd(0)
+  }
+
+  private parseBinaryRangeEnd(minPrec: number): Expr | null {
+    let left = this.parseUnary()
+    if (!left) return null
+    while (true) {
+      const k = this.peek().kind
+      if (k === "SLASH") break
+      const entry = BINARY_OPS.get(k)
+      if (!entry || entry.prec < minPrec) break
+      const opTok = this.advance()
+      const nextMin = entry.assoc === "left" ? entry.prec + 1 : entry.prec
+      const right = this.parseBinaryRangeEnd(nextMin)
+      if (!right) return null
+      left = {
+        type: "binary",
+        op: entry.op,
+        left,
+        right,
         pos: pos(opTok),
       }
     }

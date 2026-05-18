@@ -126,14 +126,18 @@ export type FunctionCall = {
 }
 
 /**
- * `start..end` (inclusive) or `start...end` (exclusive). Materializes to a
- * Range value at evaluation time. Endpoints can be any expression; step is
- * always ±1 and direction is inferred from `start` vs `end`.
+ * `start..end` (inclusive) or `start...end` (exclusive), optionally suffixed
+ * with `/step` (positive). Materializes to a Range value at evaluation time.
+ * Direction is inferred from `start` vs `end`. Semantics: `start` is always
+ * anchored, then multiples of `step` within `(start, end]` (inclusive) or
+ * `(start, end)` (exclusive) are appended.
  */
 export type RangeLit = {
   type: "range"
   start: Expr
   end: Expr
+  /** Optional `/step` modifier. `undefined` defaults to 1 at eval time. */
+  step?: Expr
   inclusive: boolean
   pos: Position
 }
@@ -271,8 +275,11 @@ export function showExpr(e: Expr): string {
       const args = e.args.map(showExpr).join(" ")
       return `(call ${e.callee}${args ? " " + args : ""})`
     }
-    case "range":
-      return `(${e.inclusive ? "range" : "range-excl"} ${showExpr(e.start)} ${showExpr(e.end)})`
+    case "range": {
+      const head = e.inclusive ? "range" : "range-excl"
+      const step = e.step ? ` /${showExpr(e.step)}` : ""
+      return `(${head} ${showExpr(e.start)} ${showExpr(e.end)}${step})`
+    }
   }
 }
 

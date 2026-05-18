@@ -21,7 +21,7 @@ exclusive.count
 
 # ─── Десятичные границы и обратный порядок ──────────────────────────────
 
-# Шаг всё ещё 1, так что 1,5 → 2,5 → 3,5 → 4,5 → 5,5
+# Snap-to-multiples: 1,5 — якорь, потом целые кратные 1 в (1,5; 5,5] = 2..5
 1,5..5,5 decimals
 decimals.sum
 decimals.avg
@@ -30,6 +30,28 @@ decimals.avg
 10..1 down
 down.sum
 down.count
+
+# ─── Кастомный шаг `/step` ──────────────────────────────────────────────
+# Семантика: start всегда якорь, потом кратные step в (start, end].
+# Для exclusive: start включается только если есть хоть один шаг внутри.
+
+1..10/1 byOne
+byOne.count
+
+1..10/3 byThree
+byThree.sum                # 1 + 3 + 6 + 9 = 19
+byThree.count
+
+1..10/5 byFive
+byFive.sum                 # 1 + 5 + 10 = 16
+byFive.count
+
+# Шаг больше предела
+1..10/100 huge
+huge.count                 # только start: 1
+
+1...10/100 hugeExcl
+hugeExcl.count             # exclusive + нет шагов внутри → пусто
 
 # ─── Keyword-форма (inclusive only) ─────────────────────────────────────
 
@@ -55,8 +77,9 @@ wallet.avg
 1..5 usd promoted
 promoted.sum
 
-# Разные юниты, одна dim — последний явный (end) задаёт юнит rangeа,
-# start конвертируется. 100 rub ≈ 1,105 usd → членов: 1,105; 2,105; 3,105; 4,105.
+# Разные юниты, одна dim — последний явный (end) задаёт юнит range'а,
+# start конвертируется. 100 rub ≈ 1,105 usd. Snap step=1: anchor 1,105
+# плюс целые кратные 1 в (1,105; 5] = 2, 3, 4, 5.
 100 rub..5 usd mixed
 mixed.count
 mixed.sum

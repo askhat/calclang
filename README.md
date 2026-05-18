@@ -85,13 +85,21 @@ SERIES wallet                       # explicit members, one per line
 5 usd
 wallet.sum                          # in series unit (last explicit)
 
-1..10 days                          # inclusive range, step 1
-1...10                              # exclusive (1, 2, ..., 9)
+1..10 days                          # inclusive: 1, 2, ..., 10
+1...10                              # exclusive: 1, 2, ..., 9
 10..1                               # walks down: 10, 9, ..., 1
-RANGE prices 1 usd 10 usd           # keyword form, inclusive only
+1..10/3                             # custom step: {1, 3, 6, 9}
+1..10/100                           # step past end: just {1} (start anchor)
+1...10/100                          # exclusive + no inner multiples → {}
+RANGE prices 1 usd 10 usd           # keyword form (inclusive)
 prices.avg                          # 5,5 usd
 (1..100).sum                        # inline parenthesized → 5 050
 ```
+
+Range semantics is **snap-to-multiples**: `start` is always anchored, then
+multiples of `step` within `(start, end]` (or `(start, end)` for exclusive)
+are appended. So `1..10/5` is `{1, 5, 10}`, not the classic arithmetic
+`{1, 6}`. To force division inside an endpoint, wrap in parens: `1..(10/3)`.
 
 ## Semantics in one minute
 
@@ -151,7 +159,6 @@ purely structural — fixed-distance lookahead, no backtracking.
   not wired).
 - Live FX rates for `unit X currency` aliases.
 - Loops (recursion via `if/then/else` works; see `examples/functions.calc`).
-- Custom range step (currently fixed at ±1).
 - Running-total syntax (`+ 50` on its own line).
 - Multi-line REPL input.
 - LSP and editor integrations.
