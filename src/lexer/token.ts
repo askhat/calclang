@@ -7,6 +7,7 @@ export type TokenKind =
   | "SERIES"
   | "RANGE"
   | "FN"
+  | "PLOT"
   | "AS"
   | "OF"
   | "IF"
@@ -65,6 +66,7 @@ export const KEYWORDS: Readonly<Record<string, TokenKind>> = {
   SERIES: "SERIES",
   RANGE: "RANGE",
   FN: "FN",
+  PLOT: "PLOT",
   as: "AS",
   of: "OF",
   if: "IF",

@@ -6,6 +6,7 @@ const VARS_ID = "vars-list"
 const SERIES_ID = "series-list"
 const RANGES_ID = "ranges-list"
 const FUNCTIONS_ID = "functions-list"
+const PLOTS_ID = "plots-list"
 const UNITS_ID = "units-list"
 const DIAGS_ID = "diagnostics-list"
 
@@ -14,6 +15,7 @@ export function renderSidebar(run: EngineRun): void {
   renderSeries(run)
   renderRanges(run)
   renderFunctions(run)
+  renderPlots(run)
   renderUnits(run)
   renderDiagnostics(run)
 }
@@ -151,6 +153,32 @@ function renderFunctions(run: EngineRun): void {
     sig.textContent = `(${f.params.join(", ")})`
     li.title = `call as ${f.name}(${f.params.join(", ")})`
     li.append(name, sig)
+    list.appendChild(li)
+  }
+}
+
+function renderPlots(run: EngineRun): void {
+  const list = document.getElementById(PLOTS_ID)
+  if (!list) return
+  list.innerHTML = ""
+  if (run.plots.length === 0) {
+    list.appendChild(emptyItem("(none yet)"))
+    return
+  }
+  for (const p of run.plots) {
+    const n = p.value.shapes.length
+    const li = document.createElement("li")
+    li.title =
+      p.value.aspect === "stretch"
+        ? "auto-chart from a series/range"
+        : "block plot — geometric / turtle primitives"
+    const name = document.createElement("span")
+    name.className = "kv-name"
+    name.textContent = p.name
+    const count = document.createElement("span")
+    count.className = "kv-value"
+    count.textContent = `${n} shape${n === 1 ? "" : "s"}`
+    li.append(name, count)
     list.appendChild(li)
   }
 }

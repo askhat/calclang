@@ -4,6 +4,7 @@ import { errorsExtension } from "./errors-extension.ts"
 import { FilesPanel } from "./files-panel.ts"
 import { hoverExtension } from "./hover-extension.ts"
 import { numberNudgeKeymap } from "./number-nudge.ts"
+import { plotsExtension } from "./plots-extension.ts"
 import { resultsExtension } from "./results-extension.ts"
 import { renderSidebar } from "./sidebar.ts"
 import { decodeSourceFromHash, shareLink } from "./share.ts"
@@ -284,6 +285,52 @@ tripBudget.sum / monthlySaving                    # месяцев копить
 # А если на отель будет early-bird скидка 15%?
 60 usd * nights - 15%                             # экономия от ранней брони
 
+# ─── Plots ──────────────────────────────────────────────────────────────
+# Две формы:
+#   PLOT <name>                — блок с инструкциями (одна на строку)
+#   PLOT <name> <series|range> — авто-график по точкам коллекции
+#
+# Примитивы блока (все аргументы dimensionless):
+#   LINE x1 y1 x2 y2
+#   RECT x y w h
+#   CIRCLE cx cy r
+#   POINT x y
+#   F dist       — turtle: вперёд на dist (рисует линию)
+#   R deg        — turtle: поворот по часовой стрелке на deg градусов
+#   L deg        — turtle: поворот против часовой стрелки
+
+# Геометрия:
+PLOT picture
+LINE 0 0 100 100
+RECT 10 10 30 20
+CIRCLE 60 60 15
+POINT 80 30
+
+# Черепашка (стартует в (0,0), смотрит вправо, перо опущено):
+PLOT square
+F 50
+R 90
+F 50
+R 90
+F 50
+R 90
+F 50
+
+# Авто-график по series:
+SERIES quarterly
+21 q1
+34 q2
+28 q3
+40 q4
+32 q5
+38 q6
+
+PLOT velocityChart quarterly
+
+# Авто-график по range (прямая y=x):
+1..20 days
+PLOT linear days
+
 # ─── Roadmap: coming soon ───────────────────────────────────────────────
 # Эти фичи в разработке (см. Stage 9+ в /Users/askhat/.claude/plans).
 # Синтаксис ниже — преview, в нынешней версии работать не будет.
@@ -355,6 +402,7 @@ const view = new EditorView({
     engineState,
     snapshotState,
     resultsExtension,
+    plotsExtension,
     errorsExtension,
     hoverExtension,
     numberNudgeKeymap,

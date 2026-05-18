@@ -559,3 +559,22 @@ dialog form {
     transform: translateX(-50%) translateY(-8px);
   }
 }
+
+/* -- Inline plot widget below `PLOT name` lines -- */
+.cm-plot-widget {
+  padding: 0.5rem 0 0.5rem 2rem;
+  background: transparent;
+}
+.cm-plot-widget .calc-plot {
+  display: block;
+  background: var(--bg-elev);
+  border: 1px solid var(--bg-elev-2);
+  border-radius: 6px;
+  color: var(--accent);
+  padding: 0.25rem;
+}
+.cm-plot-empty {
+  color: var(--text-mute);
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+}

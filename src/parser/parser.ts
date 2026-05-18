@@ -8,6 +8,8 @@ import type {
   ExprStatement,
   FunctionDecl,
   NumberLit,
+  PlotDecl,
+  PlotInstr,
   Position,
   Program,
   RangeDecl,
@@ -135,7 +137,8 @@ class Parser {
         after === "UNIT" ||
         after === "SERIES" ||
         after === "RANGE" ||
-        after === "FN"
+        after === "FN" ||
+        after === "PLOT"
       if (!atBoundary) {
         if (stmt) {
           this.diagnose(
@@ -156,6 +159,7 @@ class Parser {
     if (t.kind === "SERIES") return this.parseSeriesDecl()
     if (t.kind === "RANGE") return this.parseRangeDeclKeyword()
     if (t.kind === "FN") return this.parseFunctionDecl()
+    if (t.kind === "PLOT") return this.parsePlotDecl()
     if (this.isVariableDeclStart()) return this.parseVariableDecl()
     return this.parseExpressionOrAssignment()
   }
@@ -227,6 +231,85 @@ class Parser {
     }
   }
 
+  /**
+   * `PLOT <name>` header followed by instruction lines. Each line is
+   * `<OP> <expr>...`. Argument arity per opcode is checked in the evaluator;
+   * the parser just collects whatever expressions follow until end of line.
+   * Block ends at blank line, EOF, or the next top-level keyword.
+   */
+  private parsePlotDecl(): PlotDecl | null {
+    const plotTok = this.advance() // 'PLOT'
+    const nameTok = this.expect("IDENT")
+    if (!nameTok) return null
+
+    // One-liner form: `PLOT <name> <ident>` — auto-chart from a series/range.
+    // Distinguish from the block form by what follows the name: an IDENT
+    // here can only be a data-source reference (the block header takes its
+    // own line).
+    if (this.peek().kind === "IDENT") {
+      const refTok = this.advance()
+      return {
+        type: "plotDecl",
+        name: nameTok.lexeme,
+        instructions: [],
+        dataRef: { name: refTok.lexeme, pos: pos(refTok) },
+        pos: pos(plotTok),
+      }
+    }
+
+    if (!this.expect("NEWLINE")) return null
+
+    const instructions: PlotInstr[] = []
+    while (true) {
+      const k = this.peek().kind
+      if (
+        k === "NEWLINE" ||
+        k === "EOF" ||
+        k === "UNIT" ||
+        k === "SERIES" ||
+        k === "RANGE" ||
+        k === "FN" ||
+        k === "PLOT"
+      ) break
+
+      const instr = this.parsePlotInstr()
+      if (!instr) {
+        this.syncToLineEnd()
+        if (this.peek().kind === "NEWLINE") this.advance()
+        continue
+      }
+      instructions.push(instr)
+      if (this.peek().kind === "NEWLINE") {
+        this.advance()
+      } else if (this.peek().kind !== "EOF") {
+        this.diagnose(
+          this.peek(),
+          `unexpected ${describe(this.peek())} after plot instruction`,
+        )
+        this.syncToLineEnd()
+      }
+    }
+
+    return {
+      type: "plotDecl",
+      name: nameTok.lexeme,
+      instructions,
+      pos: pos(plotTok),
+    }
+  }
+
+  private parsePlotInstr(): PlotInstr | null {
+    const opTok = this.expect("IDENT")
+    if (!opTok) return null
+    const args: Expr[] = []
+    while (!this.isLineEnd(this.peek())) {
+      const a = this.parseExpressionRule()
+      if (!a) return null
+      args.push(a)
+    }
+    return { op: opTok.lexeme, args, pos: pos(opTok) }
+  }
+
   private parseSeriesDecl(): SeriesDecl | null {
     const seriesTok = this.advance() // 'SERIES'
     const nameTok = this.expect("IDENT")
@@ -244,7 +327,8 @@ class Parser {
         k === "UNIT" ||
         k === "SERIES" ||
         k === "RANGE" ||
-        k === "FN"
+        k === "FN" ||
+        k === "PLOT"
       ) break
 
       const member = this.parseSeriesMember()

@@ -252,6 +252,36 @@ export type RangeDecl = {
   pos: Position
 }
 
+/**
+ * A single instruction inside a `PLOT` block. `op` is the uppercase opcode
+ * (LINE, RECT, CIRCLE, POINT, F, R, L); `args` are the trailing expressions
+ * on the line. Argument arity and semantics are validated at evaluation time
+ * — the parser is intentionally permissive so new opcodes can be added
+ * without touching it.
+ */
+export type PlotInstr = {
+  op: string
+  args: Expr[]
+  pos: Position
+}
+
+/**
+ * `PLOT <name>` in either of two shapes:
+ *   - block form: header on its own line, instructions on following lines
+ *     (`instructions` populated, `dataRef` absent).
+ *   - one-liner: `PLOT <name> <ident>` — auto-generates a line chart from
+ *     the referenced series or range (`dataRef` populated, `instructions`
+ *     is the empty list).
+ * The two are mutually exclusive at parse time.
+ */
+export type PlotDecl = {
+  type: "plotDecl"
+  name: string
+  instructions: PlotInstr[]
+  dataRef?: { name: string; pos: Position }
+  pos: Position
+}
+
 export type Statement =
   | UnitDecl
   | VariableDecl
@@ -260,6 +290,7 @@ export type Statement =
   | SeriesDecl
   | FunctionDecl
   | RangeDecl
+  | PlotDecl
 
 export type Program = {
   statements: Statement[]
@@ -336,6 +367,16 @@ export function showStatement(s: Statement): string {
     }
     case "rangeDecl":
       return `(range-decl ${s.name} ${showExpr(s.range)})`
+    case "plotDecl": {
+      if (s.dataRef) return `(plot ${s.name} (data ${s.dataRef.name}))`
+      const instrs = s.instructions
+        .map((i) => {
+          const args = i.args.map(showExpr).join(" ")
+          return `(${i.op}${args ? " " + args : ""})`
+        })
+        .join(" ")
+      return `(plot ${s.name}${instrs ? " " + instrs : ""})`
+    }
   }
 }
 

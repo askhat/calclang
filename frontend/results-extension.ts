@@ -87,6 +87,7 @@ function formatResultText(r: RunResult): string | null {
     case "functionDecl":
     case "rangeDecl":
       return null
+    case "plotDecl":
     case "variableDecl":
     case "exprAssignment":
     case "exprStatement":

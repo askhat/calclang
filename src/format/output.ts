@@ -2,9 +2,11 @@ import Decimal from "decimal.js"
 import type { Diagnostic } from "../errors/diagnostic.ts"
 import type { RangeValue } from "../eval/collection.ts"
 import type { RunResult } from "../eval/evaluator.ts"
+import type { PlotValue } from "../eval/plot.ts"
 import {
   isBoolean,
   isPercent,
+  isPlotValue,
   isRange,
   type Percent,
   type Value,
@@ -73,6 +75,11 @@ export function formatPercent(p: Percent, locale: Locale = DEFAULT_LOCALE): stri
   return `${formatDecimal(p.value.times(100), locale)}%`
 }
 
+export function formatPlot(p: PlotValue): string {
+  const n = p.shapes.length
+  return `plot (${n} shape${n === 1 ? "" : "s"})`
+}
+
 export function formatValue(
   v: Value,
   locale: Locale = DEFAULT_LOCALE,
@@ -80,6 +87,7 @@ export function formatValue(
   if (isBoolean(v)) return v ? "true" : "false"
   if (isRange(v)) return formatRange(v, locale)
   if (isPercent(v)) return formatPercent(v, locale)
+  if (isPlotValue(v)) return formatPlot(v)
   return formatQuantity(v, locale)
 }
 
@@ -102,6 +110,7 @@ export function annotation(
     case "functionDecl":
     case "rangeDecl":
       return null
+    case "plotDecl":
     case "variableDecl":
     case "exprAssignment":
     case "exprStatement":
@@ -128,6 +137,7 @@ export function replLine(
     case "functionDecl":
     case "rangeDecl":
       return null
+    case "plotDecl":
     case "variableDecl":
     case "exprAssignment":
     case "exprStatement":

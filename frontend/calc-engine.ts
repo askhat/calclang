@@ -5,6 +5,7 @@ import {
   computeAggregate,
   type RunResult,
 } from "../src/eval/evaluator.ts"
+import type { PlotValue } from "../src/eval/plot.ts"
 import { isQuantity, type Value } from "../src/eval/value.ts"
 import { tokenize } from "../src/lexer/lexer.ts"
 import { parseProgram } from "../src/parser/parser.ts"
@@ -41,6 +42,11 @@ export type FunctionSummary = {
   params: string[]
 }
 
+export type PlotSummary = {
+  name: string
+  value: PlotValue
+}
+
 export type EngineRun = {
   source: string
   results: RunResult[]
@@ -59,6 +65,8 @@ export type EngineRun = {
   ranges: RangeSummary[]
   /** Declared functions for sidebar. */
   functions: FunctionSummary[]
+  /** Ready plots, for inline SVG rendering and sidebar. */
+  plots: PlotSummary[]
 }
 
 /**
@@ -129,6 +137,11 @@ export function runPipeline(source: string): EngineRun {
       functions.push({ name: fn.name, params: fn.params })
     }
 
+    const plots: PlotSummary[] = []
+    for (const [name, value] of ev.readyPlots()) {
+      plots.push({ name, value })
+    }
+
     const allDiagnostics = dedupeAndSort([
       ...lexDiagnostics,
       ...parseDiagnostics,
@@ -147,6 +160,7 @@ export function runPipeline(source: string): EngineRun {
       series,
       ranges,
       functions,
+      plots,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -169,6 +183,7 @@ export function runPipeline(source: string): EngineRun {
       series: [],
       ranges: [],
       functions: [],
+      plots: [],
     }
   }
 }

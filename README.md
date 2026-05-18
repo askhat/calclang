@@ -94,6 +94,43 @@ When both operands of `+`/`-` are percents, the result is a percent.
 `<Quantity> ± <Percent>` is the Soulver "of left" rule. Everywhere else
 percent silently collapses into its dimensionless fraction.
 
+**Plots.** Two forms — block (geometric + turtle primitives) and one-liner
+(auto-chart from a series or range):
+
+```calc
+PLOT picture                # block: each line is one drawing instruction
+LINE 0 0 100 100
+RECT 10 10 30 20
+CIRCLE 60 60 15
+POINT 80 30
+
+PLOT square                 # turtle: F (forward), R (turn right), L (left)
+F 50
+R 90
+F 50
+R 90
+F 50
+R 90
+F 50
+
+SERIES prices
+100
+120
+105
+
+PLOT chart prices           # one-liner: line chart from a series
+```
+
+Block primitives are: `LINE x1 y1 x2 y2`, `RECT x y w h`, `CIRCLE cx cy r`,
+`POINT x y`, `F dist`, `R deg`, `L deg`. The turtle starts at `(0, 0)`
+facing east with the pen down; `R` rotates clockwise, `L` counter-clockwise.
+All arguments are dimensionless `Decimal` expressions — variables and
+arithmetic work. The one-liner form maps each member to `(index, value)`
+and draws connecting line segments. The CLI annotates each `PLOT` line
+with `// = plot (N shapes)`; the web editor renders an inline SVG below
+the header line. Internally a plot is a flat list of shapes regardless
+of how it was built.
+
 **Series and ranges.** Both are iterable collections with the same
 aggregate methods (`.sum`, `.avg`, `.count`, `.min`, `.max`).
 
@@ -161,7 +198,8 @@ foo + 1                                  // error: undefined name 'foo' (did you
 - `src/units/` — `Dimension`, `Unit` (with an atom map for canonical names),
   `Quantity` arithmetic, `UnitRegistry`.
 - `src/eval/` — `Evaluator` with a lazy environment; cycle detection via a
-  shared resolving stack.
+  shared resolving stack. `plot.ts` flattens block instructions (including
+  turtle moves) into a list of shapes; the SVG renderer lives in `frontend/`.
 - `src/format/` — locale-aware number formatting, ANSI color helpers,
   Soulver-style source annotation, REPL line rendering.
 - `src/repl/` — `node:readline` REPL with `:help`, `:units`, `:vars`.
@@ -196,4 +234,5 @@ stage 5  evaluator              lazy env + Soulver-style annotated output
 stage 6  REPL                   persistent env, colored diagnostics
 stage 7  polish                 unit-name canonicalization, suggestions, golden tests
 stage 8  percent                postfix '%' literal, 'of' operator, Soulver-style +/- rule
+stage 9  plot                   PLOT block + one-liner; CLI count + inline SVG in the editor
 ```

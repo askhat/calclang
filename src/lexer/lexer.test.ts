@@ -257,6 +257,17 @@ describe("operators and punctuation", () => {
       lexeme: "range",
     })
   })
+
+  test("PLOT keyword", () => {
+    expect(kinds("PLOT pic")).toEqual(["PLOT", "IDENT", "EOF"])
+  })
+
+  test("lowercase 'plot' is a regular identifier", () => {
+    expect(tokenize("plot").tokens[0]).toMatchObject({
+      kind: "IDENT",
+      lexeme: "plot",
+    })
+  })
 })
 
 describe("comments", () => {

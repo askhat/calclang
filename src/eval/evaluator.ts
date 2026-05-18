@@ -5,6 +5,7 @@ import type {
   Expr,
   ExprAssignment,
   FunctionDecl,
+  PlotDecl,
   Position,
   Program,
   RangeDecl,
@@ -36,6 +37,7 @@ import {
   negatePercent,
   percentFromDisplay,
 } from "./percent.ts"
+import { compilePlot, dataPlotFromMembers, type PlotValue } from "./plot.ts"
 import {
   asBoolean,
   asQuantity,
@@ -67,6 +69,11 @@ type RangeBinding =
   | { state: "pending"; decl: RangeDecl }
   | { state: "resolving" }
   | { state: "ready"; value: RangeValue }
+
+type PlotBinding =
+  | { state: "pending"; decl: PlotDecl }
+  | { state: "resolving" }
+  | { state: "ready"; value: PlotValue }
 
 export type RunResult = {
   stmt: Statement
@@ -104,6 +111,7 @@ export class Evaluator {
   private readonly varEnv = new Map<string, VarBinding>()
   private readonly seriesEnv = new Map<string, SeriesBinding>()
   private readonly rangeEnv = new Map<string, RangeBinding>()
+  private readonly plotEnv = new Map<string, PlotBinding>()
   private readonly functionEnv = new Map<string, FunctionDecl>()
   /** Stack of local scopes pushed by active function calls. */
   private readonly localScopes: Array<Map<string, Value>> = []
@@ -215,12 +223,13 @@ export class Evaluator {
           if (
             this.varEnv.has(stmt.name) ||
             this.pendingUnits.has(stmt.name) ||
-            this.rangeEnv.has(stmt.name)
+            this.rangeEnv.has(stmt.name) ||
+            this.plotEnv.has(stmt.name)
           ) {
             this.report(
               `name '${stmt.name}' is already declared`,
               stmt.pos,
-              "the name must be unique across units, variables, series, ranges, and functions",
+              "the name must be unique across units, variables, series, ranges, functions, and plots",
             )
             continue
           }
@@ -266,12 +275,13 @@ export class Evaluator {
             this.varEnv.has(stmt.name) ||
             this.pendingUnits.has(stmt.name) ||
             this.seriesEnv.has(stmt.name) ||
-            this.rangeEnv.has(stmt.name)
+            this.rangeEnv.has(stmt.name) ||
+            this.plotEnv.has(stmt.name)
           ) {
             this.report(
               `name '${stmt.name}' is already declared`,
               stmt.pos,
-              "the name must be unique across units, variables, series, ranges, and functions",
+              "the name must be unique across units, variables, series, ranges, functions, and plots",
             )
             continue
           }
@@ -290,16 +300,42 @@ export class Evaluator {
             this.varEnv.has(stmt.name) ||
             this.pendingUnits.has(stmt.name) ||
             this.seriesEnv.has(stmt.name) ||
+            this.functionEnv.has(stmt.name) ||
+            this.plotEnv.has(stmt.name)
+          ) {
+            this.report(
+              `name '${stmt.name}' is already declared`,
+              stmt.pos,
+              "the name must be unique across units, variables, series, ranges, functions, and plots",
+            )
+            continue
+          }
+          this.rangeEnv.set(stmt.name, { state: "pending", decl: stmt })
+          break
+        case "plotDecl":
+          if (this.plotEnv.has(stmt.name)) {
+            this.report(
+              `plot '${stmt.name}' is already declared`,
+              stmt.pos,
+              "each plot may be declared only once",
+            )
+            continue
+          }
+          if (
+            this.varEnv.has(stmt.name) ||
+            this.pendingUnits.has(stmt.name) ||
+            this.seriesEnv.has(stmt.name) ||
+            this.rangeEnv.has(stmt.name) ||
             this.functionEnv.has(stmt.name)
           ) {
             this.report(
               `name '${stmt.name}' is already declared`,
               stmt.pos,
-              "the name must be unique across units, variables, series, ranges, and functions",
+              "the name must be unique across units, variables, series, ranges, functions, and plots",
             )
             continue
           }
-          this.rangeEnv.set(stmt.name, { state: "pending", decl: stmt })
+          this.plotEnv.set(stmt.name, { state: "pending", decl: stmt })
           break
       }
     }
@@ -320,6 +356,13 @@ export class Evaluator {
   /** Ready ranges, for sidebar / debug introspection. */
   *readyRanges(): IterableIterator<[string, RangeValue]> {
     for (const [name, b] of this.rangeEnv) {
+      if (b.state === "ready") yield [name, b.value]
+    }
+  }
+
+  /** Ready plots, for sidebar / frontend rendering. */
+  *readyPlots(): IterableIterator<[string, PlotValue]> {
+    for (const [name, b] of this.plotEnv) {
       if (b.state === "ready") yield [name, b.value]
     }
   }
@@ -367,6 +410,13 @@ export class Evaluator {
           }
           this.resolveRange(stmt.name, stmt.pos)
           return { stmt, value: null, error: null }
+        }
+        case "plotDecl": {
+          if (!this.plotEnv.has(stmt.name)) {
+            return { stmt, value: null, error: null }
+          }
+          const value = this.resolvePlot(stmt.name, stmt.pos)
+          return { stmt, value, error: null }
         }
       }
     } catch (err) {
@@ -527,6 +577,9 @@ export class Evaluator {
           // RangeValue so `.sum` etc. can dispatch off it.
           return this.resolveRange(expr.name, expr.pos)
         }
+        if (this.plotEnv.has(expr.name)) {
+          return this.resolvePlot(expr.name, expr.pos)
+        }
         if (this.seriesEnv.has(expr.name)) {
           throw new EvalError(
             `'${expr.name}' is a series — use it via a method like '${expr.name}.sum' or '${expr.name}.avg'`,
@@ -545,6 +598,7 @@ export class Evaluator {
         for (const n of this.seriesEnv.keys()) allNames.add(n)
         for (const n of this.rangeEnv.keys()) allNames.add(n)
         for (const n of this.functionEnv.keys()) allNames.add(n)
+        for (const n of this.plotEnv.keys()) allNames.add(n)
         throw new EvalError(
           `undefined name '${expr.name}'`,
           expr.pos,
@@ -824,6 +878,97 @@ export class Evaluator {
     } finally {
       this.resolvingStack.pop()
     }
+  }
+
+  private resolvePlot(name: string, refPos: Position): PlotValue {
+    const binding = this.plotEnv.get(name)
+    if (!binding) {
+      throw new EvalError(
+        `undefined plot '${name}'`,
+        refPos,
+        this.didYouMean(name, this.plotEnv.keys()),
+      )
+    }
+    if (binding.state === "ready") return binding.value
+    if (binding.state === "resolving") {
+      throw new EvalError(
+        `cyclic dependency: ${this.cycleTrail(name)}`,
+        refPos,
+      )
+    }
+
+    const original = binding
+    this.plotEnv.set(name, { state: "resolving" })
+    this.resolvingStack.push(name)
+    try {
+      let value: PlotValue
+      if (original.decl.dataRef) {
+        value = this.expandPlotDataRef(
+          original.decl.dataRef.name,
+          original.decl.dataRef.pos,
+        )
+      } else {
+        value = compilePlot(original.decl.instructions, (arg) => {
+          // Each PLOT argument must reduce to a plain dimensionless number.
+          const v = asQuantity(this.evalExpr(arg), arg.pos)
+          if (v.unit) {
+            throw new EvalError(
+              `plot arguments must be dimensionless, got ${v.unit.name}`,
+              arg.pos,
+              "PLOT coordinates and lengths are plain numbers",
+            )
+          }
+          return v.value
+        })
+      }
+      this.plotEnv.set(name, { state: "ready", value })
+      return value
+    } catch (err) {
+      this.plotEnv.set(name, original)
+      throw err
+    } finally {
+      this.resolvingStack.pop()
+    }
+  }
+
+  private expandPlotDataRef(refName: string, refPos: Position): PlotValue {
+    if (this.seriesEnv.has(refName)) {
+      const s = this.resolveSeries(refName, refPos)
+      return dataPlotFromMembers(s.members)
+    }
+    if (this.rangeEnv.has(refName)) {
+      const r = this.resolveRange(refName, refPos)
+      return dataPlotFromMembers(r.members)
+    }
+    // Concrete diagnostics instead of "undefined name": if the name resolves
+    // to a different kind, tell the user PLOT wants a series or range here.
+    if (this.varEnv.has(refName)) {
+      throw new EvalError(
+        `'${refName}' is a variable — PLOT <name> <ref> expects a series or range`,
+        refPos,
+        "use the block form (PLOT name\\n  LINE …) for ad-hoc shapes",
+      )
+    }
+    if (this.plotEnv.has(refName)) {
+      throw new EvalError(
+        `'${refName}' is a plot, not a series or range`,
+        refPos,
+      )
+    }
+    if (this.registry.has(refName) || this.pendingUnits.has(refName)) {
+      throw new EvalError(
+        `'${refName}' is a unit — PLOT <name> <ref> expects a series or range`,
+        refPos,
+      )
+    }
+    const candidates = new Set<string>()
+    for (const n of this.seriesEnv.keys()) candidates.add(n)
+    for (const n of this.rangeEnv.keys()) candidates.add(n)
+    throw new EvalError(
+      `undefined series or range '${refName}'`,
+      refPos,
+      this.didYouMean(refName, candidates),
+    )
   }
 
   private resolveRange(name: string, refPos: Position): RangeValue {

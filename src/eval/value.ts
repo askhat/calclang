@@ -3,6 +3,7 @@ import type { Position } from "../parser/ast.ts"
 import type { Quantity } from "../units/quantity.ts"
 import type { RangeValue } from "./collection.ts"
 import { EvalError } from "./errors.ts"
+import type { PlotValue } from "./plot.ts"
 
 /**
  * A percentage. Internally a fraction (0.20 for 20%). Distinct Value variant
@@ -21,11 +22,12 @@ export type Percent = {
  *   - Quantity: object with `value` and `unit` (no `kind`).
  *   - RangeValue: object with `kind: "range"`.
  *   - Percent: object with `kind: "percent"`.
+ *   - PlotValue: object with `kind: "plot"`.
  *   - boolean: primitive.
  * Series values are NOT first-class — a bare series identifier is an error
  * because there's no useful arithmetic to do with it.
  */
-export type Value = Quantity | boolean | RangeValue | Percent
+export type Value = Quantity | boolean | RangeValue | Percent | PlotValue
 
 export function isBoolean(v: Value): v is boolean {
   return typeof v === "boolean"
@@ -37,6 +39,10 @@ export function isRange(v: Value): v is RangeValue {
 
 export function isPercent(v: Value): v is Percent {
   return typeof v === "object" && "kind" in v && v.kind === "percent"
+}
+
+export function isPlotValue(v: Value): v is PlotValue {
+  return typeof v === "object" && "kind" in v && v.kind === "plot"
 }
 
 export function isQuantity(v: Value): v is Quantity {
@@ -63,6 +69,13 @@ export function asQuantity(v: Value, pos: Position): Quantity {
       `arithmetic and conversion operators don't apply to ranges; use '.sum', '.avg', etc.`,
     )
   }
+  if (isPlotValue(v)) {
+    throw new EvalError(
+      `expected a quantity here, got a plot`,
+      pos,
+      `arithmetic and conversion operators don't apply to plots`,
+    )
+  }
   if (isPercent(v)) {
     return { value: v.value, unit: null }
   }
@@ -71,8 +84,9 @@ export function asQuantity(v: Value, pos: Position): Quantity {
 
 export function asBoolean(v: Value, pos: Position): boolean {
   if (!isBoolean(v)) {
+    const kind = isRange(v) ? "range" : isPlotValue(v) ? "plot" : "quantity"
     throw new EvalError(
-      `expected a boolean here, got a ${isRange(v) ? "range" : "quantity"}`,
+      `expected a boolean here, got a ${kind}`,
       pos,
       `'and', 'or', 'not', and the condition of if/then/else need a boolean`,
     )
