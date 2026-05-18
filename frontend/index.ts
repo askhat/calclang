@@ -218,6 +218,30 @@ velocity.sum                                      # суммарно за ква
 backlogPoints / velocity.avg                      # спринтов чтобы выгрести
 velocity.avg * 6                                  # прогноз на следующие 6 спринтов
 
+# ─── Real-world: vacation budget across currencies ──────────────────────
+# Три валюты: kzt (своя), usd (международная), try (локальная).
+# Series.sum конвертирует разнокалиберные траты в единый юнит — последний
+# с явным юнитом (kzt здесь) выигрывает.
+
+UNIT (usd / 34) try                              # курс ≈ 34 лиры за доллар
+
+14 nights                                         # длительность поездки
+
+SERIES tripBudget
+800 usd flights                                   # перелёт в долларах
+60 usd * nights hotel                             # $60 за ночь × 14 ночей
+30_000 try food                                   # еда на месте — лиры
+20_000 try activities                             # экскурсии, такси
+50_000 kzt souvenirs                              # сувениры — обратно домой
+
+tripBudget.sum                                    # итог в kzt (последний явный)
+tripBudget.sum as usd                             # …в долларах
+tripBudget.sum as try                             # …в лирах
+
+# План: сколько откладывать с зарплаты, чтобы поехать через N месяцев
+600_000 kzt monthlySaving
+tripBudget.sum / monthlySaving                    # месяцев копить
+
 # ─── Tips ───────────────────────────────────────────────────────────────
 # • Alt+↑ / Alt+↓ on a number nudges it.
 # • Hover an identifier for its value.
