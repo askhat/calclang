@@ -179,6 +179,45 @@ scenarios.dream                                  # платёж при 12%
 scenarios.baseRate                               # платёж при 18%
 scenarios.baseRate - scenarios.dream             # сколько съедает каждый "лишний" %
 
+# ─── Real-world: freelance billing ──────────────────────────────────────
+# Композитный юнит 'usd/h' несёт ставку; sum часов × ставка → доход.
+# Размерности проверяются: h · (usd/h) = usd.
+
+UNIT Time h
+120 (usd / h) hourlyRate                         # ставка $120 в час
+
+SERIES week                                       # часы по дням
+6 h mon
+8 h tue
+3 h wed
+7 h thu
+5 h fri
+
+week.sum                                          # часов всего
+week.sum * hourlyRate                             # доход за неделю
+week.sum * hourlyRate * 4                         # ~доход за месяц
+week.avg                                          # средняя длина рабочего дня
+
+# ─── Real-world: team velocity & forecast ───────────────────────────────
+# Story points за каждый спринт — series; средняя → прогноз → срок бэклога.
+
+SERIES velocity
+21 sprint1
+34 sprint2
+28 sprint3
+40 sprint4
+32 sprint5
+38 sprint6
+
+velocity.avg                                      # средняя velocity
+velocity.min                                      # худший спринт
+velocity.max                                      # лучший спринт
+velocity.sum                                      # суммарно за квартал
+
+180 backlogPoints                                 # backlog к разбору
+backlogPoints / velocity.avg                      # спринтов чтобы выгрести
+velocity.avg * 6                                  # прогноз на следующие 6 спринтов
+
 # ─── Tips ───────────────────────────────────────────────────────────────
 # • Alt+↑ / Alt+↓ on a number nudges it.
 # • Hover an identifier for its value.
