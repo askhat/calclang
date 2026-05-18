@@ -25,5 +25,5 @@ SERIES wallet
 2000 rub                                          // = 2 000 rub
 50 usd                                            // = 50 usd
 
-wallet.sum                                        // = 7 077,5 rub
-wallet.avg                                        // = 1 769,375 rub
+wallet.sum                                        // = 78,20442 usd
+wallet.avg                                        // = 19,551105 usd

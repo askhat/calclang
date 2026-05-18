@@ -37,6 +37,12 @@ export type SeriesValue = {
   members: Quantity[]
   /** Unified dimension vector for the members (`{}` for dimensionless). */
   dimension: import("../units/dimension.ts").DimensionVector
+  /**
+   * The series' "default" unit — the unit of the last member that had an
+   * explicit unit. `null` iff every member is dimensionless. Unit-less
+   * members are promoted into this unit; aggregates render in it.
+   */
+  seriesUnit: Unit | null
 }
 
 type SeriesBinding =
@@ -578,24 +584,48 @@ export class Evaluator {
     this.seriesEnv.set(name, { state: "resolving" })
     this.resolvingStack.push(name)
     try {
-      const members: Quantity[] = []
-      let dim: import("../units/dimension.ts").DimensionVector | null = null
+      // Phase 1: evaluate every member to a raw quantity.
+      const evaluated: Quantity[] = []
       for (const memberExpr of original.decl.members) {
         const v = this.evalExpr(memberExpr)
-        const q = asQuantity(v, memberExpr.pos)
+        evaluated.push(asQuantity(v, memberExpr.pos))
+      }
+
+      // Phase 2: series unit = unit of the last member that brought one.
+      let seriesUnit: Unit | null = null
+      for (let i = evaluated.length - 1; i >= 0; i--) {
+        const u = evaluated[i]!.unit
+        if (u) {
+          seriesUnit = u
+          break
+        }
+      }
+
+      // Phase 3: promote dimensionless members into the series unit, check
+      // dimension consistency.
+      const members: Quantity[] = []
+      const expectedDim = seriesUnit?.dimension ?? {}
+      for (let i = 0; i < evaluated.length; i++) {
+        let q = evaluated[i]!
+        if (!q.unit && seriesUnit) {
+          q = { value: q.value, unit: seriesUnit }
+        }
         const qDim = q.unit?.dimension ?? {}
-        if (dim === null) {
-          dim = qDim
-        } else if (!Dim.equals(dim, qDim)) {
+        if (!Dim.equals(expectedDim, qDim)) {
           throw new EvalError(
-            `series '${name}' mixes dimensions: ${Dim.format(dim)} and ${Dim.format(qDim)}`,
-            memberExpr.pos,
+            `series '${name}' mixes dimensions: ${Dim.format(expectedDim)} and ${Dim.format(qDim)}`,
+            original.decl.members[i]!.pos,
             "all members of a series must share a dimension",
           )
         }
         members.push(q)
       }
-      const value: SeriesValue = { members, dimension: dim ?? {} }
+
+      const value: SeriesValue = {
+        members,
+        dimension: expectedDim,
+        seriesUnit,
+      }
       this.seriesEnv.set(name, { state: "ready", value })
       return value
     } catch (err) {
@@ -713,11 +743,12 @@ function sumSeries(series: SeriesValue, pos: Position): Quantity {
   try {
     let acc = series.members[0]!
     for (let i = 1; i < series.members.length; i++) {
-      // Q.add lets the right operand's unit win; pass acc on the right
-      // so the result keeps the first member's unit.
-      acc = Q.add(series.members[i]!, acc)
+      // Q.add lets the right operand's unit win. After Phase-3 promotion,
+      // the last member's unit IS the series unit, so folding left-to-right
+      // naturally yields a result in the series unit.
+      acc = Q.add(acc, series.members[i]!)
     }
-    return acc
+    return inSeriesUnit(acc, series, pos)
   } catch (err) {
     throw EvalError.from(err, pos)
   }
@@ -746,7 +777,27 @@ function extremeSeries(
       const cmp = Q.compare(series.members[i]!, best)
       if (kind === "min" ? cmp < 0 : cmp > 0) best = series.members[i]!
     }
-    return best
+    return inSeriesUnit(best, series, pos)
+  } catch (err) {
+    throw EvalError.from(err, pos)
+  }
+}
+
+/**
+ * Coerce an aggregate result into the series unit so `.sum`, `.avg`, `.min`,
+ * `.max` always render in the same unit even when members were mixed (e.g.
+ * rub + usd within the Currency dimension).
+ */
+function inSeriesUnit(
+  q: Quantity,
+  series: SeriesValue,
+  pos: Position,
+): Quantity {
+  if (!series.seriesUnit) return q
+  if (!q.unit) return { value: q.value, unit: series.seriesUnit }
+  if (q.unit === series.seriesUnit) return q
+  try {
+    return Q.convert(q, series.seriesUnit)
   } catch (err) {
     throw EvalError.from(err, pos)
   }

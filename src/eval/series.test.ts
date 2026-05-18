@@ -82,7 +82,7 @@ describe("SERIES with units", () => {
     ).toBe("350")
   })
 
-  test("series with mixed units (same dim): result in first member's unit", () => {
+  test("series with mixed units (same dim): result in series unit (last explicit)", () => {
     const src = [
       "UNIT Currency usd",
       "UNIT (usd / 90,5) rub",
@@ -95,17 +95,15 @@ describe("SERIES with units", () => {
     const { results, diagnostics } = run(src)
     expect(diagnostics).toEqual([])
     const r = results[results.length - 1]!
-    expect(r.value && isQuantity(r.value) && r.value.unit?.name).toBe("rub")
-    // First member rub. 100 rub + 5 usd; 5 usd in rub = 5 * 90.5 = 452.5
-    // Total in rub: 100 + 452.5 = 552.5. Decimal carries the conversion
-    // round-trip imprecisely at the trailing digits, so compare on a
-    // rounded form (which is what the formatter shows users).
+    // Series unit = unit of last explicit member = usd. Sum is in usd.
+    expect(r.value && isQuantity(r.value) && r.value.unit?.name).toBe("usd")
+    // 100 rub in usd = 100/90.5 ≈ 1.1050; + 5 usd → ≈ 6.1050.
     expect(
       r.value && isQuantity(r.value) ? r.value.value.toFixed(4) : "",
-    ).toBe("552.5000")
+    ).toBe("6.1050")
   })
 
-  test("min/max across same-dim, different-unit members", () => {
+  test("min/max across same-dim, different-unit members converts to series unit", () => {
     const src = [
       "UNIT Currency usd",
       "UNIT (usd / 90,5) rub",
@@ -116,9 +114,13 @@ describe("SERIES with units", () => {
       "wallet.min",
     ].join("\n")
     const { results } = run(src)
-    // 100 rub ≈ 1.105 usd. 5 usd > 1.105. So min is 100 rub.
+    // 100 rub ≈ 1.105 usd. 5 usd > 1.105. So min is 100 rub, then converted
+    // to the series unit (usd) so all aggregates render uniformly.
     const r = results[results.length - 1]!
-    expect(r.value && isQuantity(r.value) && r.value.unit?.name).toBe("rub")
+    expect(r.value && isQuantity(r.value) && r.value.unit?.name).toBe("usd")
+    expect(
+      r.value && isQuantity(r.value) ? r.value.value.toFixed(4) : "",
+    ).toBe("1.1050")
   })
 
   test("dimension mismatch in series is diagnosed", () => {
