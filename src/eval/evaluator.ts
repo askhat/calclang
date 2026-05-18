@@ -8,6 +8,7 @@ import type {
   Position,
   Program,
   SeriesDecl,
+  SeriesMember,
   Statement,
   UnitDecl,
   UnitExpr,
@@ -43,6 +44,8 @@ export type SeriesValue = {
    * members are promoted into this unit; aggregates render in it.
    */
   seriesUnit: Unit | null
+  /** Map from named-member name to its (post-promotion) Quantity. */
+  byName: ReadonlyMap<string, Quantity>
 }
 
 type SeriesBinding =
@@ -106,12 +109,12 @@ export class Evaluator {
           // Publish each member's value as a synthetic expr-statement result
           // so the editor can render `= value` next to each member line.
           for (let i = 0; i < stmt.members.length; i++) {
-            const memberExpr = stmt.members[i]!
+            const member = stmt.members[i]!
             out.push({
               stmt: {
                 type: "exprStatement",
-                expr: memberExpr,
-                pos: memberExpr.pos,
+                expr: member.expr,
+                pos: member.expr.pos,
               },
               value: binding.value.members[i]!,
               error: null,
@@ -182,7 +185,7 @@ export class Evaluator {
           break
         case "exprStatement":
           break
-        case "seriesDecl":
+        case "seriesDecl": {
           if (this.seriesEnv.has(stmt.name)) {
             this.report(
               `series '${stmt.name}' is already declared`,
@@ -199,8 +202,35 @@ export class Evaluator {
             )
             continue
           }
+          // Validate member names eagerly so the declaration is rejected
+          // before any reference attempts to resolve it.
+          const seen = new Set<string>()
+          let memberError = false
+          for (const m of stmt.members) {
+            if (!m.name) continue
+            const where = m.namePos ?? m.expr.pos
+            if (AGGREGATE_METHODS.has(m.name)) {
+              this.report(
+                `member name '${m.name}' clashes with the built-in series method '.${m.name}'`,
+                where,
+                "rename the member; '.sum', '.avg', '.count', '.min', '.max' are reserved",
+              )
+              memberError = true
+            }
+            if (seen.has(m.name)) {
+              this.report(
+                `series '${stmt.name}' has duplicate member name '${m.name}'`,
+                where,
+                "each member's name must be unique within its series",
+              )
+              memberError = true
+            }
+            seen.add(m.name)
+          }
+          if (memberError) continue
           this.seriesEnv.set(stmt.name, { state: "pending", decl: stmt })
           break
+        }
         case "functionDecl":
           if (this.functionEnv.has(stmt.name)) {
             this.report(
@@ -509,7 +539,24 @@ export class Evaluator {
             expr.pos,
           )
         }
-        const series = this.resolveSeries(expr.target.name, expr.target.pos)
+        const seriesName = expr.target.name
+        const series = this.resolveSeries(seriesName, expr.target.pos)
+        // Named member wins over aggregate methods. Name collisions are
+        // already rejected in pass 1, so this is a clean dispatch.
+        const named = series.byName.get(expr.property)
+        if (named) return named
+        if (!AGGREGATE_METHODS.has(expr.property)) {
+          const methods = [...AGGREGATE_METHODS].sort().join(", ")
+          const memberNames = [...series.byName.keys()]
+          const hint = memberNames.length
+            ? `available methods: ${methods}; members of '${seriesName}': ${memberNames.join(", ")}`
+            : `available methods: ${methods}`
+          throw new EvalError(
+            `series '${seriesName}' has no '.${expr.property}'`,
+            expr.pos,
+            hint,
+          )
+        }
         return computeAggregate(series, expr.property, expr.pos)
       }
       case "call": {
@@ -585,16 +632,17 @@ export class Evaluator {
     this.resolvingStack.push(name)
     try {
       // Phase 1: evaluate every member to a raw quantity.
-      const evaluated: Quantity[] = []
-      for (const memberExpr of original.decl.members) {
-        const v = this.evalExpr(memberExpr)
-        evaluated.push(asQuantity(v, memberExpr.pos))
+      const evaluated: { q: Quantity; member: SeriesMember }[] = []
+      for (const member of original.decl.members) {
+        const v = this.evalExpr(member.expr)
+        const q = asQuantity(v, member.expr.pos)
+        evaluated.push({ q, member })
       }
 
       // Phase 2: series unit = unit of the last member that brought one.
       let seriesUnit: Unit | null = null
       for (let i = evaluated.length - 1; i >= 0; i--) {
-        const u = evaluated[i]!.unit
+        const u = evaluated[i]!.q.unit
         if (u) {
           seriesUnit = u
           break
@@ -602,29 +650,32 @@ export class Evaluator {
       }
 
       // Phase 3: promote dimensionless members into the series unit, check
-      // dimension consistency.
+      // dimension consistency, and index named members.
       const members: Quantity[] = []
+      const byName = new Map<string, Quantity>()
       const expectedDim = seriesUnit?.dimension ?? {}
-      for (let i = 0; i < evaluated.length; i++) {
-        let q = evaluated[i]!
+      for (const { q, member } of evaluated) {
+        let promoted = q
         if (!q.unit && seriesUnit) {
-          q = { value: q.value, unit: seriesUnit }
+          promoted = { value: q.value, unit: seriesUnit }
         }
-        const qDim = q.unit?.dimension ?? {}
-        if (!Dim.equals(expectedDim, qDim)) {
+        const promotedDim = promoted.unit?.dimension ?? {}
+        if (!Dim.equals(expectedDim, promotedDim)) {
           throw new EvalError(
-            `series '${name}' mixes dimensions: ${Dim.format(expectedDim)} and ${Dim.format(qDim)}`,
-            original.decl.members[i]!.pos,
+            `series '${name}' mixes dimensions: ${Dim.format(expectedDim)} and ${Dim.format(promotedDim)}`,
+            member.expr.pos,
             "all members of a series must share a dimension",
           )
         }
-        members.push(q)
+        members.push(promoted)
+        if (member.name) byName.set(member.name, promoted)
       }
 
       const value: SeriesValue = {
         members,
         dimension: expectedDim,
         seriesUnit,
+        byName,
       }
       this.seriesEnv.set(name, { state: "ready", value })
       return value

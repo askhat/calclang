@@ -7,9 +7,11 @@ import type {
   ExprAssignment,
   ExprStatement,
   FunctionDecl,
+  NumberLit,
   Position,
   Program,
   SeriesDecl,
+  SeriesMember,
   Statement,
   UnaryOp,
   UnitDecl,
@@ -192,7 +194,7 @@ class Parser {
     // The header takes its own line; members follow on subsequent lines.
     if (!this.expect("NEWLINE")) return null
 
-    const members: Expr[] = []
+    const members: SeriesMember[] = []
     while (true) {
       const k = this.peek().kind
       // Blank line / EOF / next top-level keyword → end of series.
@@ -204,14 +206,14 @@ class Parser {
         k === "FN"
       ) break
 
-      const expr = this.parseExpressionRule()
-      if (!expr) {
+      const member = this.parseSeriesMember()
+      if (!member) {
         // Skip the broken line and keep collecting members.
         this.syncToLineEnd()
         if (this.peek().kind === "NEWLINE") this.advance()
         continue
       }
-      members.push(expr)
+      members.push(member)
       if (this.peek().kind === "NEWLINE") {
         this.advance()
       } else if (this.peek().kind !== "EOF") {
@@ -229,6 +231,124 @@ class Parser {
       members,
       pos: pos(seriesTok),
     }
+  }
+
+  private parseSeriesMember(): SeriesMember | null {
+    // The var-decl-like form (`[+|-]? NUMBER [<unit>] <name>`) is matched
+    // first so an unknown identifier after a bare number is taken as the
+    // member's name rather than swallowed as a broken unit by parsePrimary.
+    if (this.isNamedSimpleMemberStart()) {
+      return this.parseNamedSimpleMember()
+    }
+    const expr = this.parseExpressionRule()
+    if (!expr) return null
+    // Trailing-name form: any expression followed by `<IDENT> NEWLINE`.
+    if (this.peek().kind === "IDENT" && this.isLineEnd(this.peek(1))) {
+      const nameTok = this.advance()
+      return { expr, name: nameTok.lexeme, namePos: pos(nameTok) }
+    }
+    return { expr }
+  }
+
+  /**
+   * Lookahead for the var-decl-like simple-named form inside a SERIES:
+   *   [+|-]? NUMBER <name>              — only if <name> is NOT a known unit
+   *   [+|-]? NUMBER <unit> <name>       — first IDENT taken as unit
+   *   [+|-]? NUMBER ( <unit_expr> ) <name>
+   * In all cases the line must end immediately after the name.
+   */
+  private isNamedSimpleMemberStart(): boolean {
+    let i = 0
+    const k0 = this.peek(i).kind
+    if (k0 === "MINUS" || k0 === "PLUS") i++
+    if (this.peek(i).kind !== "NUMBER") return false
+    i++
+    const after = this.peek(i).kind
+    if (after === "IDENT") {
+      // NUMBER IDENT (line end) — dimensionless named iff IDENT isn't a unit.
+      // (If it IS a unit, fall through so parseExpressionRule keeps the
+      //  existing anonymous-united-member semantics, e.g. `5 usd`.)
+      if (this.isLineEnd(this.peek(i + 1))) {
+        return !this.unitNames.has(this.peek(i).lexeme)
+      }
+      // NUMBER IDENT IDENT (line end) — first IDENT is unit, second is name.
+      if (
+        this.peek(i + 1).kind === "IDENT" &&
+        this.isLineEnd(this.peek(i + 2))
+      ) {
+        return true
+      }
+      return false
+    }
+    if (after === "LPAREN") {
+      // NUMBER ( … ) IDENT (line end) — composite-unit named member.
+      let depth = 1
+      i++
+      while (depth > 0) {
+        const k = this.peek(i).kind
+        if (k === "EOF" || k === "NEWLINE") return false
+        if (k === "LPAREN") depth++
+        else if (k === "RPAREN") depth--
+        i++
+      }
+      if (
+        this.peek(i).kind === "IDENT" &&
+        this.isLineEnd(this.peek(i + 1))
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private parseNamedSimpleMember(): SeriesMember | null {
+    const startTok = this.peek()
+    let sign: 1 | -1 = 1
+    if (this.peek().kind === "MINUS") {
+      this.advance()
+      sign = -1
+    } else if (this.peek().kind === "PLUS") {
+      this.advance()
+    }
+
+    const numTok = this.expect("NUMBER")
+    if (!numTok) return null
+    let value = new Decimal(numTok.value)
+    if (sign === -1) value = value.neg()
+
+    let unit: UnitExpr | undefined
+    // NUMBER IDENT IDENT — first IDENT is unit, second is name.
+    if (
+      this.peek().kind === "IDENT" &&
+      this.peek(1).kind === "IDENT"
+    ) {
+      const unitTok = this.advance()
+      if (!this.unitNames.has(unitTok.lexeme)) {
+        this.diagnose(
+          unitTok,
+          `unknown unit '${unitTok.lexeme}'`,
+          `add 'UNIT <Dimension> ${unitTok.lexeme}' or 'UNIT <Dimension> ${unitTok.lexeme} (<expr>)'`,
+        )
+      }
+      unit = { type: "unitRef", name: unitTok.lexeme, pos: pos(unitTok) }
+    } else if (this.peek().kind === "LPAREN") {
+      this.advance()
+      const u = this.parseUnitExpr()
+      if (!u) return null
+      if (!this.expect("RPAREN")) return null
+      unit = u
+    }
+
+    const nameTok = this.expect("IDENT")
+    if (!nameTok) return null
+
+    const expr: NumberLit = {
+      type: "number",
+      value,
+      unit,
+      pos: pos(startTok),
+    }
+    return { expr, name: nameTok.lexeme, namePos: pos(nameTok) }
   }
 
   /** Pure-lookahead test for the [+|-]? NUMBER ... IDENT (NEWLINE|EOF) shape. */

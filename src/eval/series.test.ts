@@ -152,7 +152,7 @@ describe("SERIES error paths", () => {
     const src = "SERIES foo\n1\n\nfoo.frobnicate"
     const { diagnostics } = run(src)
     expect(diagnostics.length).toBeGreaterThan(0)
-    expect(diagnostics[0]?.message).toContain("unknown series method")
+    expect(diagnostics[0]?.message).toContain("has no '.frobnicate'")
   })
 
   test("empty series: count is 0, sum/avg errors", () => {
@@ -221,6 +221,107 @@ describe("SERIES with referenced variables", () => {
     const { results, diagnostics } = run(src)
     expect(diagnostics).toEqual([])
     expect(lastValue(results)).toBe("20")
+  })
+})
+
+describe("SERIES — named members (`foo.bar` access)", () => {
+  test("plain access returns the member's value", () => {
+    const src = ["SERIES foo", "100 bar", "200 baz", "", "foo.bar"].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    expect(lastValue(results)).toBe("100")
+  })
+
+  test("named member with explicit unit keeps its unit (no conversion)", () => {
+    const src = [
+      "UNIT Currency usd",
+      "UNIT (usd / 90,5) rub",
+      "SERIES foo",
+      "500 usd bar",
+      "400 baz",
+      "-100 rub qux",
+      "",
+      "foo.bar",
+    ].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    expect(lastValue(results)).toBe("500 usd")
+  })
+
+  test("unit-less member inherits series unit (last explicit)", () => {
+    const src = [
+      "UNIT Currency usd",
+      "UNIT (usd / 90,5) rub",
+      "SERIES foo",
+      "500 usd bar",
+      "400 baz",
+      "-100 rub qux",
+      "",
+      "foo.baz",
+    ].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    // baz had no explicit unit; series unit = rub (last explicit) → baz = 400 rub.
+    expect(lastValue(results)).toBe("400 rub")
+  })
+
+  test("negative-sign named member parses correctly", () => {
+    const src = ["SERIES foo", "-100 bar", "", "foo.bar"].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    expect(lastValue(results)).toBe("-100")
+  })
+
+  test("named member from a parenthesized expression", () => {
+    const src = ["SERIES foo", "(10 + 5) total", "", "foo.total"].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    expect(lastValue(results)).toBe("15")
+  })
+
+  test("named member name clashing with aggregate is rejected at decl", () => {
+    const src = ["SERIES foo", "1 sum", "2"].join("\n")
+    const { diagnostics } = run(src)
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]?.message).toContain("'sum'")
+    expect(diagnostics[0]?.message.toLowerCase()).toContain("built-in")
+  })
+
+  test("duplicate member names within one series are rejected", () => {
+    const src = ["SERIES foo", "1 bar", "2 bar"].join("\n")
+    const { diagnostics } = run(src)
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]?.message.toLowerCase()).toContain("duplicate")
+  })
+
+  test("unknown property suggests aggregates AND members in the hint", () => {
+    const src = ["SERIES foo", "10 bar", "20 baz", "", "foo.xyz"].join("\n")
+    const { diagnostics } = run(src)
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]?.message).toContain("has no '.xyz'")
+    expect(diagnostics[0]?.hint).toContain("bar")
+    expect(diagnostics[0]?.hint).toContain("baz")
+  })
+
+  test("aggregates still work alongside named members", () => {
+    const src = [
+      "UNIT Currency usd",
+      "UNIT (usd / 90,5) rub",
+      "SERIES foo",
+      "500 usd bar",
+      "400 baz",
+      "-100 rub qux",
+      "",
+      "foo.sum",
+    ].join("\n")
+    const { results, diagnostics } = run(src)
+    expect(diagnostics).toEqual([])
+    const r = results[results.length - 1]!
+    // Sum is in series unit (rub). 500 usd → 500*90.5 = 45250; + 400 (rub) - 100 = 45550.
+    expect(r.value && isQuantity(r.value) && r.value.unit?.name).toBe("rub")
+    expect(
+      r.value && isQuantity(r.value) ? r.value.value.toFixed(2) : "",
+    ).toBe("45550.00")
   })
 })
 

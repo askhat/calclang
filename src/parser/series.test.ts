@@ -52,6 +52,47 @@ describe("parseSeriesDecl", () => {
     expect(show(src)).toBe("(series foo (add 1 2) (mul 10 3) (neg 5))")
   })
 
+  test("members can be named (var-decl-like form)", () => {
+    const src = [
+      "UNIT Currency usd",
+      "UNIT Currency rub",
+      "SERIES foo",
+      "500 usd bar",
+      "400 baz",
+      "-100 rub qux",
+    ].join("\n")
+    const { program } = parse(src)
+    // 2 unit decls + the series.
+    expect(program.statements).toHaveLength(3)
+    expect(showStatement(program.statements[2]!)).toBe(
+      "(series foo (named bar (qty 500 usd)) (named baz 400) (named qux (qty -100 rub)))",
+    )
+  })
+
+  test("known unit after number stays a unit, not a name", () => {
+    // `5 usd` without a trailing IDENT → anonymous united member.
+    const src = ["UNIT Currency usd", "SERIES foo", "5 usd"].join("\n")
+    const { program } = parse(src)
+    expect(showStatement(program.statements[1]!)).toBe(
+      "(series foo (qty 5 usd))",
+    )
+  })
+
+  test("trailing IDENT on a complex expression becomes the member name", () => {
+    const src = ["SERIES foo", "(1 + 2) total"].join("\n")
+    const { program } = parse(src)
+    expect(showStatement(program.statements[0]!)).toBe(
+      "(series foo (named total (add 1 2)))",
+    )
+  })
+
+  test("mixed named and anonymous members in one series", () => {
+    const src = ["SERIES foo", "100 bar", "200", "300 baz"].join("\n")
+    expect(show(src)).toBe(
+      "(series foo (named bar 100) 200 (named baz 300))",
+    )
+  })
+
   test("empty series (header followed by blank line)", () => {
     expect(show("SERIES foo\n\nrest")).toBe(
       "(series foo)\nrest",

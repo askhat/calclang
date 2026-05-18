@@ -171,14 +171,27 @@ export type ExprStatement = {
 }
 
 /**
- * `SERIES <name>` followed by member-expression lines on subsequent lines.
- * Terminated by a blank line, EOF, or another top-level keyword. Members
- * must share a dimension at evaluation time.
+ * A single member of a `SERIES` block. `expr` is the member's value; if
+ * `name` is present, the member is accessible as `<series>.<name>`.
+ */
+export type SeriesMember = {
+  expr: Expr
+  name?: string
+  /** Position of the name IDENT, for diagnostics. Absent iff `name` is absent. */
+  namePos?: Position
+}
+
+/**
+ * `SERIES <name>` followed by member lines. Each member is either a bare
+ * expression or `<expr> <name>` (and the simple `[+|-]? NUMBER [<unit>] <name>`
+ * form is recognized so an unknown identifier after a number is treated as
+ * the member's name rather than as a broken unit). Members must share a
+ * dimension at evaluation time.
  */
 export type SeriesDecl = {
   type: "seriesDecl"
   name: string
-  members: Expr[]
+  members: SeriesMember[]
   pos: Position
 }
 
@@ -258,7 +271,11 @@ export function showStatement(s: Statement): string {
     case "exprStatement":
       return showExpr(s.expr)
     case "seriesDecl": {
-      const ms = s.members.map(showExpr).join(" ")
+      const ms = s.members
+        .map((m) =>
+          m.name ? `(named ${m.name} ${showExpr(m.expr)})` : showExpr(m.expr),
+        )
+        .join(" ")
       return `(series ${s.name}${ms ? " " + ms : ""})`
     }
     case "functionDecl": {
