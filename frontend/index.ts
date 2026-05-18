@@ -147,6 +147,38 @@ SERIES temps
 FN scaled(k) temps.sum * k
 scaled(2)
 
+# ─── Real-world: mortgage calculator ────────────────────────────────────
+# Pull it all together — units + variables + assignments + FN + named-member
+# series. Cost of an apartment, down payment, annuity, overpay, and a
+# side-by-side rate comparison.
+
+15_000_000 rub apartmentPrice
+3_000_000 rub downPayment
+apartmentPrice - downPayment = loanAmount        # сколько брать в ипотеку
+240 termMonths                                    # срок 20 лет
+
+# Аннуитетный платёж: P · r · (1+r)^n / ((1+r)^n − 1), где r = annual / 12.
+FN payment(p, annual, n) p * (annual / 12) * (1 + annual / 12) ^ n / ((1 + annual / 12) ^ n - 1)
+
+payment(loanAmount, 0,18, termMonths) = monthlyPayment
+monthlyPayment * termMonths = totalPayments
+totalPayments - loanAmount = overpayment         # переплата банку
+
+loanAmount as usd                                # та же сумма в долларах
+monthlyPayment as usd
+overpayment as usd
+
+# Сценарии разных ставок — series с FN-вызовами в членах:
+SERIES scenarios
+payment(loanAmount, 0,12, termMonths) dream
+payment(loanAmount, 0,14, termMonths) good
+payment(loanAmount, 0,16, termMonths) okRate
+payment(loanAmount, 0,18, termMonths) baseRate
+
+scenarios.dream                                  # платёж при 12%
+scenarios.baseRate                               # платёж при 18%
+scenarios.baseRate - scenarios.dream             # сколько съедает каждый "лишний" %
+
 # ─── Tips ───────────────────────────────────────────────────────────────
 # • Alt+↑ / Alt+↓ on a number nudges it.
 # • Hover an identifier for its value.
