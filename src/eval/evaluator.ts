@@ -37,7 +37,13 @@ import {
   negatePercent,
   percentFromDisplay,
 } from "./percent.ts"
-import { compilePlot, dataPlotFromMembers, type PlotValue } from "./plot.ts"
+import {
+  compilePlot,
+  dataPlotFromMembers,
+  mergePlots,
+  SERIES_PALETTE,
+  type PlotValue,
+} from "./plot.ts"
 import {
   asBoolean,
   asQuantity,
@@ -558,6 +564,12 @@ export class Evaluator {
         }
         return { value: expr.value, unit: null }
       }
+      case "string":
+        throw new EvalError(
+          `string literals have no value outside PLOT TEXT`,
+          expr.pos,
+          'use a string only as the last arg of `TEXT x y "..."`',
+        )
       case "ident": {
         // Local scopes (function parameters) win over globals so a function
         // body's `m` refers to the param, not the `m` unit.
@@ -902,11 +914,19 @@ export class Evaluator {
     this.resolvingStack.push(name)
     try {
       let value: PlotValue
-      if (original.decl.dataRef) {
-        value = this.expandPlotDataRef(
-          original.decl.dataRef.name,
-          original.decl.dataRef.pos,
-        )
+      if (original.decl.dataRefs.length > 0) {
+        const parts: PlotValue[] = []
+        for (let i = 0; i < original.decl.dataRefs.length; i++) {
+          const ref = original.decl.dataRefs[i]!
+          // Single-ref: no palette color (renderer uses currentColor).
+          // Multi-ref: cycle through SERIES_PALETTE so each layer is distinct.
+          const color =
+            original.decl.dataRefs.length === 1
+              ? undefined
+              : SERIES_PALETTE[i % SERIES_PALETTE.length]
+          parts.push(this.expandPlotDataRef(ref.name, ref.pos, color))
+        }
+        value = mergePlots(parts)
       } else {
         value = compilePlot(original.decl.instructions, (arg) => {
           // Each PLOT argument must reduce to a plain dimensionless number.
@@ -931,14 +951,18 @@ export class Evaluator {
     }
   }
 
-  private expandPlotDataRef(refName: string, refPos: Position): PlotValue {
+  private expandPlotDataRef(
+    refName: string,
+    refPos: Position,
+    color?: string,
+  ): PlotValue {
     if (this.seriesEnv.has(refName)) {
       const s = this.resolveSeries(refName, refPos)
-      return dataPlotFromMembers(s.members)
+      return dataPlotFromMembers(s.members, color)
     }
     if (this.rangeEnv.has(refName)) {
       const r = this.resolveRange(refName, refPos)
-      return dataPlotFromMembers(r.members)
+      return dataPlotFromMembers(r.members, color)
     }
     // Concrete diagnostics instead of "undefined name": if the name resolves
     // to a different kind, tell the user PLOT wants a series or range here.

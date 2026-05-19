@@ -31,6 +31,7 @@ export type UnitPow = {
 
 export type Expr =
   | NumberLit
+  | StringLit
   | Identifier
   | UnaryExpr
   | BinaryExpr
@@ -46,6 +47,17 @@ export type NumberLit = {
   value: Decimal
   /** Optional unit suffix: present iff the source had `NUMBER unit_expr`. */
   unit?: UnitExpr
+  pos: Position
+}
+
+/**
+ * Double-quoted string literal. Strings are NOT general first-class values;
+ * the evaluator rejects them in arithmetic contexts. The only consumer is
+ * `PLOT TEXT` whose third arg reads `value` directly from the AST.
+ */
+export type StringLit = {
+  type: "string"
+  value: string
   pos: Position
 }
 
@@ -268,17 +280,17 @@ export type PlotInstr = {
 /**
  * `PLOT <name>` in either of two shapes:
  *   - block form: header on its own line, instructions on following lines
- *     (`instructions` populated, `dataRef` absent).
- *   - one-liner: `PLOT <name> <ident>` — auto-generates a line chart from
- *     the referenced series or range (`dataRef` populated, `instructions`
- *     is the empty list).
- * The two are mutually exclusive at parse time.
+ *     (`instructions` populated, `dataRefs` empty).
+ *   - one-liner: `PLOT <name> <ident>+` — auto-generates a line chart from
+ *     one or more referenced series/ranges (`dataRefs` populated). With
+ *     multiple refs the chart overlays them, each in a distinct color.
+ * The two forms are mutually exclusive at parse time.
  */
 export type PlotDecl = {
   type: "plotDecl"
   name: string
   instructions: PlotInstr[]
-  dataRef?: { name: string; pos: Position }
+  dataRefs: Array<{ name: string; pos: Position }>
   pos: Position
 }
 
@@ -304,6 +316,8 @@ export function showExpr(e: Expr): string {
       return e.unit
         ? `(qty ${e.value.toString()} ${showUnitExpr(e.unit)})`
         : e.value.toString()
+    case "string":
+      return `"${e.value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
     case "ident":
       return e.name
     case "unary":
@@ -368,7 +382,10 @@ export function showStatement(s: Statement): string {
     case "rangeDecl":
       return `(range-decl ${s.name} ${showExpr(s.range)})`
     case "plotDecl": {
-      if (s.dataRef) return `(plot ${s.name} (data ${s.dataRef.name}))`
+      if (s.dataRefs.length > 0) {
+        const refs = s.dataRefs.map((r) => r.name).join(" ")
+        return `(plot ${s.name} (data ${refs}))`
+      }
       const instrs = s.instructions
         .map((i) => {
           const args = i.args.map(showExpr).join(" ")

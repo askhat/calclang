@@ -95,21 +95,21 @@ When both operands of `+`/`-` are percents, the result is a percent.
 percent silently collapses into its dimensionless fraction.
 
 **Plots.** Two forms — block (geometric + turtle primitives) and one-liner
-(auto-chart from a series or range):
+(auto-chart from one or more series/ranges):
 
 ```calc
 PLOT picture                # block: each line is one drawing instruction
+SIZE 100 100                # explicit viewport (else auto-fit)
 LINE 0 0 100 100
 RECT 10 10 30 20
 CIRCLE 60 60 15
 POINT 80 30
+TEXT 50 50 "center"         # label at (50, 50)
 
-PLOT square                 # turtle: F (forward), R (turn right), L (left)
+PLOT square                 # turtle: F (forward), R / L (turn), M (jump)
 F 50
 R 90
-F 50
-R 90
-F 50
+F 50                        # … pen lifted with U; lowered with D
 R 90
 F 50
 
@@ -119,16 +119,27 @@ SERIES prices
 105
 
 PLOT chart prices           # one-liner: line chart from a series
+PLOT compare a b c          # multiple refs → overlay, palette per layer
 ```
 
-Block primitives are: `LINE x1 y1 x2 y2`, `RECT x y w h`, `CIRCLE cx cy r`,
-`POINT x y`, `F dist`, `R deg`, `L deg`. The turtle starts at `(0, 0)`
-facing east with the pen down; `R` rotates clockwise, `L` counter-clockwise.
-All arguments are dimensionless `Decimal` expressions — variables and
-arithmetic work. The one-liner form maps each member to `(index, value)`
-and draws connecting line segments. The CLI annotates each `PLOT` line
-with `// = plot (N shapes)`; the web editor renders an inline SVG below
-the header line. Internally a plot is a flat list of shapes regardless
+Block primitives: `LINE x1 y1 x2 y2`, `RECT x y w h`, `CIRCLE cx cy r`,
+`POINT x y`, `TEXT x y "label"`, `SIZE w h`, `F dist`, `R deg`, `L deg`,
+`M x y` (jump w/o drawing), `U` / `D` (pen up / down). The turtle starts
+at `(0, 0)` facing east with the pen down; `R` rotates clockwise.
+
+PLOT args are **strict primaries** — space-separated NUMBER/IDENT/parens
+with an optional unary `-`/`+`/`not`. Arithmetic needs parens:
+`CIRCLE cx (cx + 30) r`. This sidesteps the `IDENT(...)` vs `IDENT (...)`
+function-call ambiguity that would otherwise turn space-separated args
+into one expression.
+
+All numeric args are dimensionless `Decimal`s; the only string context is
+the third arg of `TEXT`. The one-liner form maps each member to
+`(index, value)` and connects them with line segments. With multiple
+refs, layers are coloured from a small palette so they read as an overlay.
+The CLI annotates each `PLOT` line with `// = plot (N shapes)`; the web
+editor renders an inline SVG below the header (auto-fit viewBox, or the
+explicit `SIZE`). Internally a plot is a flat list of shapes regardless
 of how it was built.
 
 **Series and ranges.** Both are iterable collections with the same

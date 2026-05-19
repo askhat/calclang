@@ -74,6 +74,10 @@ class Lexer {
       this.number(startLine, startCol)
       return
     }
+    if (c === '"') {
+      this.string(startLine, startCol)
+      return
+    }
     if (this.isIdentStart(c)) {
       this.identifier(startLine, startCol)
       return
@@ -178,6 +182,58 @@ class Lexer {
       } else {
         return
       }
+    }
+  }
+
+  /**
+   * Double-quoted string literal. Supports `\"` and `\\` escapes; a literal
+   * newline inside a string is an error (strings stay on one line). The
+   * lexeme keeps the quotes; `value` carries the decoded content.
+   */
+  private string(startLine: number, startCol: number): void {
+    const start = this.pos
+    this.advance() // opening "
+    let buf = ""
+    while (true) {
+      if (this.isAtEnd() || this.peek() === "\n") {
+        this.diagnostic(
+          "unterminated string literal",
+          startLine,
+          startCol,
+          'add a closing \'"\' — strings must stay on a single line',
+        )
+        const lexeme = this.source.slice(start, this.pos)
+        this.push("STRING", lexeme, startLine, startCol, buf)
+        return
+      }
+      const c = this.peek()
+      if (c === '"') {
+        this.advance() // closing "
+        const lexeme = this.source.slice(start, this.pos)
+        this.push("STRING", lexeme, startLine, startCol, buf)
+        return
+      }
+      if (c === "\\") {
+        this.advance()
+        const next = this.peek()
+        if (next === '"' || next === "\\") {
+          buf += next
+          this.advance()
+        } else {
+          this.diagnostic(
+            `unknown string escape '\\${next}'`,
+            this.line,
+            this.col - 1,
+            "supported escapes: \\\" and \\\\",
+          )
+          // Recover by treating the backslash literally.
+          buf += "\\" + next
+          this.advance()
+        }
+        continue
+      }
+      buf += c
+      this.advance()
     }
   }
 

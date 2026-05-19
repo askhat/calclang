@@ -1,0 +1,94 @@
+# PLOT — drawing primitives + auto-charts.
+# Coords are dimensionless Decimals; vars work; turtle flattens into LINEs.
+
+# ── Geometric primitives ──────────────────────────────────────────────
+PLOT shapes
+LINE 0 0 100 100
+RECT 10 10 30 20
+CIRCLE 60 60 15
+POINT 80 30
+
+# ── Variables in args ────────────────────────────────────────────────
+# PLOT args are strict primaries — wrap arithmetic in parens.
+10 cx
+20 r
+PLOT vars
+CIRCLE cx cx r
+CIRCLE (cx + 30) cx r
+CIRCLE (cx + 60) cx r
+
+# ── Turtle: square via F + R ─────────────────────────────────────────
+PLOT square
+F 50
+R 90
+F 50
+R 90
+F 50
+R 90
+F 50
+
+# ── Turtle: L is the inverse of R ────────────────────────────────────
+PLOT mirror
+F 30
+L 90
+F 30
+
+# ── Turtle: MOVE / pen UP/DOWN for multi-stroke drawings ─────────────
+PLOT dashed
+F 10
+U
+F 10
+D
+F 10
+M 50 0
+F 20
+
+# ── Explicit viewport via SIZE ───────────────────────────────────────
+PLOT framed
+SIZE 100 100
+RECT 0 0 100 100
+CIRCLE 50 50 20
+
+# ── Text labels ──────────────────────────────────────────────────────
+PLOT labeled
+LINE 0 0 100 0
+TEXT 50 -10 "axis"
+
+# ── Empty plot (zero shapes) ─────────────────────────────────────────
+PLOT empty
+
+# ── Auto-chart from a series ─────────────────────────────────────────
+SERIES prices
+100
+120
+105
+140
+115
+160
+
+PLOT chart prices
+
+# ── Auto-chart from a range ──────────────────────────────────────────
+RANGE r10 1 10
+PLOT diag r10
+
+# ── Singleton series degenerates to a point ──────────────────────────
+SERIES one
+42
+
+PLOT solo one
+
+# ── Multi-series overlay (palette colors per layer) ──────────────────
+SERIES revenue
+100
+120
+105
+140
+
+SERIES cost
+80
+90
+85
+100
+
+PLOT compare revenue cost

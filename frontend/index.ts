@@ -6,7 +6,7 @@ import { hoverExtension } from "./hover-extension.ts"
 import { numberNudgeKeymap } from "./number-nudge.ts"
 import { plotsExtension } from "./plots-extension.ts"
 import { resultsExtension } from "./results-extension.ts"
-import { renderSidebar } from "./sidebar.ts"
+import { renderSidebar, setSidebarCallbacks } from "./sidebar.ts"
 import { decodeSourceFromHash, shareLink } from "./share.ts"
 import { engineState, setSnapshot, snapshotState } from "./state.ts"
 import {
@@ -287,26 +287,32 @@ tripBudget.sum / monthlySaving                    # месяцев копить
 
 # ─── Plots ──────────────────────────────────────────────────────────────
 # Две формы:
-#   PLOT <name>                — блок с инструкциями (одна на строку)
-#   PLOT <name> <series|range> — авто-график по точкам коллекции
+#   PLOT <name>                       — блок с инструкциями (одна на строку)
+#   PLOT <name> <series|range>+       — авто-график; несколько ссылок → overlay
 #
-# Примитивы блока (все аргументы dimensionless):
-#   LINE x1 y1 x2 y2
-#   RECT x y w h
-#   CIRCLE cx cy r
-#   POINT x y
-#   F dist       — turtle: вперёд на dist (рисует линию)
-#   R deg        — turtle: поворот по часовой стрелке на deg градусов
-#   L deg        — turtle: поворот против часовой стрелки
+# Примитивы блока (аргументы — выражения без юнитов, обёрнутые в скобки
+# для арифметики: \`CIRCLE cx (cx + 10) r\`):
+#   LINE x1 y1 x2 y2            прямая линия
+#   RECT x y w h                прямоугольник
+#   CIRCLE cx cy r              окружность
+#   POINT x y                   точка
+#   TEXT x y "..."              надпись
+#   SIZE w h                    явный viewport вместо auto-fit
+#   F dist                      turtle: вперёд (рисует если pen down)
+#   R deg / L deg               turtle: поворот по/против часовой
+#   M x y                       turtle: телепорт в (x, y) без следа
+#   U / D                       turtle: pen up / pen down
 
-# Геометрия:
+# Геометрия + текст:
 PLOT picture
+SIZE 100 100
 LINE 0 0 100 100
 RECT 10 10 30 20
 CIRCLE 60 60 15
 POINT 80 30
+TEXT 50 50 "center"
 
-# Черепашка (стартует в (0,0), смотрит вправо, перо опущено):
+# Черепашка: квадрат
 PLOT square
 F 50
 R 90
@@ -315,6 +321,18 @@ R 90
 F 50
 R 90
 F 50
+
+# Pen up/down для пунктира:
+PLOT dashed
+F 15
+U
+F 10
+D
+F 15
+U
+F 10
+D
+F 15
 
 # Авто-график по series:
 SERIES quarterly
@@ -330,6 +348,25 @@ PLOT velocityChart quarterly
 # Авто-график по range (прямая y=x):
 1..20 days
 PLOT linear days
+
+# Overlay двух series разными цветами:
+SERIES revenue
+100
+120
+105
+140
+115
+160
+
+SERIES costs
+80
+95
+90
+110
+105
+130
+
+PLOT compare revenue costs
 
 # ─── Roadmap: coming soon ───────────────────────────────────────────────
 # Эти фичи в разработке (см. Stage 9+ в /Users/askhat/.claude/plans).
@@ -412,6 +449,28 @@ const view = new EditorView({
       renderSidebar(update.state.field(engineState))
     }),
   ],
+})
+
+setSidebarCallbacks({
+  onPlotClick: (line) => {
+    if (line < 1 || line > view.state.doc.lines) return
+    const lineObj = view.state.doc.line(line)
+    view.focus()
+    view.dispatch({
+      selection: { anchor: lineObj.from, head: lineObj.from },
+    })
+    // The `scrollIntoView: true` transaction flag no-ops here because the
+    // PLOT block widget below the target line throws CM's intrinsic scroll
+    // heuristic off. Estimate the Y from the line index times the default
+    // line height and center it manually — that ignores block-widget heights
+    // but lands close enough for navigation.
+    const scroller = view.scrollDOM
+    const approxLineHeight = view.defaultLineHeight || 22
+    scroller.scrollTop = Math.max(
+      0,
+      (line - 1) * approxLineHeight - scroller.clientHeight / 2,
+    )
+  },
 })
 
 renderSidebar(view.state.field(engineState))

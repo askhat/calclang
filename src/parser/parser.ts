@@ -104,6 +104,13 @@ export function collectUnitNames(tokens: readonly Token[]): Set<string> {
 class Parser {
   private cursor = 0
   private readonly eof: Token
+  /**
+   * When true, `NUMBER` literals do not consume a trailing IDENT as a unit
+   * suffix. Used inside PLOT-arg parsing where args are dimensionless and
+   * an adjacent IDENT is meant as the next arg (e.g. `CIRCLE 30 cx r`).
+   * Doesn't affect known-unit attachment elsewhere in the program.
+   */
+  private noNumberUnit = false
   readonly diagnostics: Diagnostic[] = []
 
   constructor(
@@ -242,17 +249,21 @@ class Parser {
     const nameTok = this.expect("IDENT")
     if (!nameTok) return null
 
-    // One-liner form: `PLOT <name> <ident>` — auto-chart from a series/range.
-    // Distinguish from the block form by what follows the name: an IDENT
-    // here can only be a data-source reference (the block header takes its
-    // own line).
+    // One-liner form: `PLOT <name> <ident>+` — auto-chart from one or more
+    // series/ranges. Distinguished from the block form by what follows the
+    // name: any IDENT(s) here are data-source references. With multiple
+    // refs the chart overlays them in different colors.
     if (this.peek().kind === "IDENT") {
-      const refTok = this.advance()
+      const dataRefs: PlotDecl["dataRefs"] = []
+      while (this.peek().kind === "IDENT") {
+        const refTok = this.advance()
+        dataRefs.push({ name: refTok.lexeme, pos: pos(refTok) })
+      }
       return {
         type: "plotDecl",
         name: nameTok.lexeme,
         instructions: [],
-        dataRef: { name: refTok.lexeme, pos: pos(refTok) },
+        dataRefs,
         pos: pos(plotTok),
       }
     }
@@ -294,6 +305,7 @@ class Parser {
       type: "plotDecl",
       name: nameTok.lexeme,
       instructions,
+      dataRefs: [],
       pos: pos(plotTok),
     }
   }
@@ -302,12 +314,42 @@ class Parser {
     const opTok = this.expect("IDENT")
     if (!opTok) return null
     const args: Expr[] = []
-    while (!this.isLineEnd(this.peek())) {
-      const a = this.parseExpressionRule()
-      if (!a) return null
-      args.push(a)
+    // PLOT args are space-separated primary expressions: optional unary
+    // prefix, then a primary (NUMBER / IDENT / parenthesized expr / STRING).
+    // No top-level binary operators — this rules out the `50 -10 "label"`
+    // → `50 - 10` and `cx (y+5)` → `cx(y+5)` footguns. For arithmetic
+    // inside an arg, wrap in parens: `CIRCLE cx (cx + 30) r`.
+    const prev = this.noNumberUnit
+    this.noNumberUnit = true
+    try {
+      while (!this.isLineEnd(this.peek())) {
+        const a = this.parsePlotArg()
+        if (!a) return null
+        args.push(a)
+      }
+    } finally {
+      this.noNumberUnit = prev
     }
     return { op: opTok.lexeme, args, pos: pos(opTok) }
+  }
+
+  /**
+   * One PLOT instruction argument — strict primary (no top-level binary).
+   * Postfix `as`, `%`, and `.prop` still apply because they're part of the
+   * conversion-level production, which terminates at the next whitespace
+   * delimiter anyway.
+   */
+  private parsePlotArg(): Expr | null {
+    const t = this.peek()
+    if (t.kind === "MINUS" || t.kind === "PLUS" || t.kind === "NOT") {
+      this.advance()
+      const operand = this.parseConversion()
+      if (!operand) return null
+      const op: UnaryOp =
+        t.kind === "MINUS" ? "neg" : t.kind === "PLUS" ? "pos" : "not"
+      return { type: "unary", op, operand, pos: pos(t) }
+    }
+    return this.parseConversion()
   }
 
   private parseSeriesDecl(): SeriesDecl | null {
@@ -877,7 +919,7 @@ class Parser {
         this.advance()
         let unit: UnitExpr | undefined
         const next = this.peek()
-        if (next.kind === "IDENT") {
+        if (next.kind === "IDENT" && !this.noNumberUnit) {
           if (this.unitNames.has(next.lexeme)) {
             this.advance()
             unit = {
@@ -914,12 +956,22 @@ class Parser {
           pos: pos(t),
         }
       }
+      case "STRING": {
+        this.advance()
+        return { type: "string", value: t.value, pos: pos(t) }
+      }
       case "IDENT": {
         this.advance()
-        // IDENT immediately followed by '(' is a function call. There's no
-        // implicit multiplication in the grammar, so the only meaning of
-        // `name(...)` is application.
-        if (this.peek().kind === "LPAREN") {
+        // `IDENT(` (no space between) is a function call. `IDENT (` (with
+        // whitespace) is NOT a call — the IDENT stands alone and the `(`
+        // starts a fresh parenthesized expression. The lexer doesn't track
+        // whitespace, so we infer it from column positions. This rule is
+        // global; inside PLOT args it eliminates the `CIRCLE x (y+5) r`
+        // → `CIRCLE x(y+5) r` footgun, and elsewhere it disambiguates
+        // similar typos without breaking `sqrt(2)`.
+        const after = this.peek()
+        const adjacent = after.line === t.line && after.col === t.col + t.lexeme.length
+        if (after.kind === "LPAREN" && adjacent) {
           this.advance()
           const args: Expr[] = []
           this.skipNewlines()
