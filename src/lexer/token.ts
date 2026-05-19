@@ -1,6 +1,7 @@
 export type TokenKind =
   // literals & names
   | "NUMBER"
+  | "STRING"
   | "IDENT"
   // keywords
   | "UNIT"

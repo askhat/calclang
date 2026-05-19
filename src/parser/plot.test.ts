@@ -43,9 +43,20 @@ describe("parsePlotDecl", () => {
     expect(show(src)).toBe("(plot pic (F 50) (R 90) (F 30) (L 45))")
   })
 
-  test("arguments can be expressions", () => {
-    const src = ["PLOT pic", "LINE 0 0 5 + 5 10 * 2"].join("\n")
+  test("arguments can be parenthesized expressions", () => {
+    // Top-level binary is disallowed in PLOT args (each arg is a primary).
+    // Wrap arithmetic in parens to use it as a single arg.
+    const src = ["PLOT pic", "LINE 0 0 (5 + 5) (10 * 2)"].join("\n")
     expect(show(src)).toBe("(plot pic (LINE 0 0 (add 5 5) (mul 10 2)))")
+  })
+
+  test("top-level binary in PLOT args is rejected — splits into separate args", () => {
+    // `LINE 0 0 5 + 5 10 * 2` parses as 7 args (each token a primary), not 4.
+    const src = ["PLOT pic", "LINE 0 0 5 + 5 10 * 2"].join("\n")
+    const { diagnostics } = parse(src)
+    // The parser itself is permissive (collects whatever); arity is checked
+    // at eval. But `+` as a leading-arg unary is allowed, `*` is not.
+    expect(diagnostics.length).toBeGreaterThan(0)
   })
 
   test("blank line terminates the block", () => {

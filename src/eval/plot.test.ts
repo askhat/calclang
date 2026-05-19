@@ -51,14 +51,13 @@ describe("PLOT — geometric primitives", () => {
   })
 
   test("arguments evaluate as expressions (vars and arithmetic)", () => {
-    // Note: putting `IDENT(...)` next to each other parses as a function call
-    // by the surrounding grammar, so use bare arithmetic for compound args
-    // (or pre-compute into a variable).
+    // PLOT args are strict: each is one primary expression (no top-level
+    // binary operators). Wrap arithmetic in parens.
     const p = plotOf(
       [
         "10 cx",
         "PLOT p",
-        "CIRCLE cx cx + 5 3",
+        "CIRCLE cx (cx + 5) 3",
       ].join("\n"),
     )
     expect(p.shapes).toHaveLength(1)
@@ -69,7 +68,7 @@ describe("PLOT — geometric primitives", () => {
     expect(s.r.toString()).toBe("3")
   })
 
-  test("parenthesized expressions work as args when no IDENT precedes '('", () => {
+  test("parenthesized expressions work as args", () => {
     const p = plotOf(["PLOT p", "CIRCLE 0 0 (5 + 5)"].join("\n"))
     const s = p.shapes[0]!
     if (s.kind !== "circle") throw new Error("kind mismatch")
@@ -107,6 +106,26 @@ describe("PLOT — turtle primitives compile to lines", () => {
     expect(p.shapes.every((s) => s.kind === "line")).toBe(true)
   })
 
+  test("U lifts the pen — subsequent F doesn't draw, D resumes", () => {
+    const p = plotOf(
+      ["PLOT p", "F 10", "U", "F 10", "D", "F 10"].join("\n"),
+    )
+    // Only the first and last F emit lines (pen down, pen down).
+    expect(p.shapes).toHaveLength(2)
+    expect(p.shapes.every((s) => s.kind === "line")).toBe(true)
+  })
+
+  test("M jumps to absolute coords without drawing", () => {
+    const p = plotOf(["PLOT p", "F 10", "M 100 100", "F 10"].join("\n"))
+    // Two F's, M itself doesn't draw → 2 lines.
+    expect(p.shapes).toHaveLength(2)
+    const second = p.shapes[1]!
+    if (second.kind !== "line") throw new Error("kind mismatch")
+    // Second F starts from where M placed us — x1 should be 100.
+    expect(second.x1.toString()).toBe("100")
+    expect(second.y1.toString()).toBe("100")
+  })
+
   test("L is the inverse of R for direction", () => {
     const a = plotOf(["PLOT a", "R 90", "F 5"].join("\n"))
     const b = plotOf(["PLOT b", "L 90", "F 5"].join("\n"))
@@ -116,6 +135,28 @@ describe("PLOT — turtle primitives compile to lines", () => {
     // After R 90 heading is south (+y); after L 90 heading is north (-y).
     expect(Number(sa.y2.toString())).toBeCloseTo(5, 10)
     expect(Number(sb.y2.toString())).toBeCloseTo(-5, 10)
+  })
+})
+
+describe("PLOT — explicit viewport (SIZE)", () => {
+  test("SIZE sets the viewport on the PlotValue", () => {
+    const p = plotOf(["PLOT p", "SIZE 200 100", "LINE 0 0 50 50"].join("\n"))
+    expect(p.viewport).toBeDefined()
+    expect(p.viewport!.w.toString()).toBe("200")
+    expect(p.viewport!.h.toString()).toBe("100")
+  })
+
+  test("SIZE doesn't emit a shape on its own", () => {
+    const p = plotOf(["PLOT p", "SIZE 100 100"].join("\n"))
+    expect(p.shapes).toHaveLength(0)
+    expect(p.viewport).toBeDefined()
+  })
+
+  test("last SIZE wins when repeated", () => {
+    const p = plotOf(
+      ["PLOT p", "SIZE 100 100", "LINE 0 0 1 1", "SIZE 50 50"].join("\n"),
+    )
+    expect(p.viewport!.w.toString()).toBe("50")
   })
 })
 
@@ -132,11 +173,23 @@ describe("PLOT — validation", () => {
     expect(diagnostics[0]!.message).toMatch(/'LINE' expects 4 argument/)
   })
 
-  test("arguments must be dimensionless", () => {
-    const src = ["UNIT Length m", "PLOT p", "LINE 0 0 5 m 10"].join("\n")
+  test("arguments must be dimensionless — unit-named ident is rejected", () => {
+    // Use parens so the unit ident is a single primary expression (not split
+    // into two args). `(m)` evaluates to a unit-bearing quantity; the eval
+    // step catches it as non-dimensionless.
+    const src = ["UNIT Length m", "PLOT p", "LINE 0 0 (m) 10"].join("\n")
     const { diagnostics } = run(src)
     expect(diagnostics.length).toBeGreaterThan(0)
     expect(diagnostics[0]!.message).toMatch(/dimensionless/)
+  })
+
+  test("a bare `NUMBER unit` suffix is rejected at parse time as wrong arity", () => {
+    // Inside PLOT args, NUMBER does NOT consume a trailing IDENT as a unit,
+    // so `5 m 10` is three separate args rather than `<5 m>` and `10`.
+    const src = ["UNIT Length m", "PLOT p", "LINE 0 0 5 m 10"].join("\n")
+    const { diagnostics } = run(src)
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]!.message).toMatch(/'LINE' expects 4 argument/)
   })
 
   test("duplicate plot name is a collect-time error", () => {
@@ -222,6 +275,75 @@ describe("PLOT — one-liner (auto-chart from series/range)", () => {
     expect(diagnostics.length).toBeGreaterThan(0)
     expect(diagnostics[0]!.message).toMatch(/undefined series or range/)
     expect(diagnostics[0]!.hint).toMatch(/prices/)
+  })
+})
+
+describe("PLOT — TEXT primitive + string literals", () => {
+  test("TEXT emits a text shape with x, y, content", () => {
+    const p = plotOf(['PLOT p', 'TEXT 10 20 "hello"'].join("\n"))
+    expect(p.shapes).toHaveLength(1)
+    const s = p.shapes[0]!
+    if (s.kind !== "text") throw new Error("kind mismatch")
+    expect(s.x.toString()).toBe("10")
+    expect(s.y.toString()).toBe("20")
+    expect(s.text).toBe("hello")
+  })
+
+  test("TEXT rejects non-string third arg", () => {
+    const { diagnostics } = run("PLOT p\nTEXT 0 0 42")
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]!.message).toMatch(/must be a string literal/)
+  })
+
+  test("string literal outside PLOT TEXT errors", () => {
+    const { diagnostics } = run('"hello"')
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]!.message).toMatch(/string literals/)
+  })
+
+  test('TEXT supports escapes \\" and \\\\', () => {
+    const p = plotOf(['PLOT p', 'TEXT 0 0 "say \\"hi\\""'].join("\n"))
+    const s = p.shapes[0]!
+    if (s.kind !== "text") throw new Error("kind mismatch")
+    expect(s.text).toBe('say "hi"')
+  })
+})
+
+describe("PLOT — multi-series overlay", () => {
+  test("two series overlay with palette colors", () => {
+    const src = [
+      "SERIES a",
+      "1",
+      "2",
+      "3",
+      "",
+      "SERIES b",
+      "5",
+      "4",
+      "3",
+      "",
+      "PLOT compare a b",
+    ].join("\n")
+    const p = plotOf(src)
+    expect(p.shapes).toHaveLength(4)
+    // Layers are distinguished by color.
+    const colors = new Set(p.shapes.map((s) => s.color))
+    expect(colors.size).toBe(2)
+  })
+
+  test("single ref still works (no palette color)", () => {
+    const src = ["SERIES s", "1", "2", "", "PLOT chart s"].join("\n")
+    const p = plotOf(src)
+    expect(p.shapes).toHaveLength(1)
+    // Single layer: leaves color undefined so renderer uses currentColor.
+    expect(p.shapes[0]!.color).toBeUndefined()
+  })
+
+  test("invalid ref among multiple is reported", () => {
+    const src = ["SERIES a", "1", "2", "", "PLOT bad a foo"].join("\n")
+    const { diagnostics } = run(src)
+    expect(diagnostics.length).toBeGreaterThan(0)
+    expect(diagnostics[0]!.message).toMatch(/undefined series or range/)
   })
 })
 

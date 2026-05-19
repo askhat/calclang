@@ -2,6 +2,17 @@ import * as Dim from "../src/units/dimension.ts"
 import { formatValue } from "../src/format/output.ts"
 import type { EngineRun } from "./calc-engine.ts"
 
+export type SidebarCallbacks = {
+  /** Called when the user clicks a plot row — supplies the 1-based source line. */
+  onPlotClick?: (line: number) => void
+}
+
+let callbacks: SidebarCallbacks = {}
+
+export function setSidebarCallbacks(cb: SidebarCallbacks): void {
+  callbacks = cb
+}
+
 const VARS_ID = "vars-list"
 const SERIES_ID = "series-list"
 const RANGES_ID = "ranges-list"
@@ -165,13 +176,21 @@ function renderPlots(run: EngineRun): void {
     list.appendChild(emptyItem("(none yet)"))
     return
   }
+  // Index plotDecl statements by name so each row can carry its source line.
+  const lineByName = new Map<string, number>()
+  for (const r of run.results) {
+    if (r.stmt.type === "plotDecl") lineByName.set(r.stmt.name, r.stmt.pos.line)
+  }
   for (const p of run.plots) {
     const n = p.value.shapes.length
+    const line = lineByName.get(p.name)
     const li = document.createElement("li")
+    li.className = "plot-item"
     li.title =
-      p.value.aspect === "stretch"
+      (p.value.aspect === "stretch"
         ? "auto-chart from a series/range"
-        : "block plot — geometric / turtle primitives"
+        : "block plot — geometric / turtle primitives") +
+      (line ? " — click to jump" : "")
     const name = document.createElement("span")
     name.className = "kv-name"
     name.textContent = p.name
@@ -179,6 +198,12 @@ function renderPlots(run: EngineRun): void {
     count.className = "kv-value"
     count.textContent = `${n} shape${n === 1 ? "" : "s"}`
     li.append(name, count)
+    if (line !== undefined) {
+      li.style.cursor = "pointer"
+      li.addEventListener("click", () => {
+        callbacks.onPlotClick?.(line)
+      })
+    }
     list.appendChild(li)
   }
 }

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "calc": "bun run src/index.ts",
-    "dev": "bun run --hot src/server.ts",
+    "dev": "node api.js && bun run --hot src/server.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },

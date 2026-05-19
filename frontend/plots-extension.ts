@@ -13,6 +13,38 @@ import type { PlotValue } from "../src/eval/plot.ts"
 import { renderPlotSVG } from "./plot-svg.ts"
 import { engineState } from "./state.ts"
 
+/**
+ * Builds a small "Copy SVG" button that writes the SVG's `outerHTML` to the
+ * clipboard with an `xmlns` attribute baked in so the result is a valid,
+ * paste-able standalone SVG document.
+ */
+function makeCopyButton(svg: SVGSVGElement): HTMLButtonElement {
+  const btn = document.createElement("button")
+  btn.type = "button"
+  btn.className = "cm-plot-copy"
+  btn.textContent = "Copy SVG"
+  btn.title = "Copy this plot's SVG source to the clipboard"
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // `outerHTML` on an SVG node already includes xmlns once we've set it
+    // during render. Fall back to a manual prompt if the Clipboard API
+    // isn't available (Safari without HTTPS, etc.).
+    const source = svg.outerHTML
+    try {
+      await navigator.clipboard.writeText(source)
+      const original = btn.textContent
+      btn.textContent = "Copied!"
+      setTimeout(() => {
+        btn.textContent = original
+      }, 1200)
+    } catch {
+      window.prompt("Copy this SVG manually:", source)
+    }
+  })
+  return btn
+}
+
 class PlotWidget extends WidgetType {
   constructor(
     private readonly plot: PlotValue,
@@ -35,7 +67,9 @@ class PlotWidget extends WidgetType {
       container.appendChild(empty)
       return container
     }
-    container.appendChild(renderPlotSVG(this.plot))
+    const svg = renderPlotSVG(this.plot)
+    container.appendChild(svg)
+    container.appendChild(makeCopyButton(svg))
     return container
   }
 
@@ -52,16 +86,21 @@ function plotKey(name: string, plot: PlotValue): string {
   const parts = plot.shapes.map((s) => {
     switch (s.kind) {
       case "line":
-        return `L${s.x1}|${s.y1}|${s.x2}|${s.y2}`
+        return `L${s.x1}|${s.y1}|${s.x2}|${s.y2}|${s.color ?? ""}`
       case "rect":
-        return `R${s.x}|${s.y}|${s.w}|${s.h}`
+        return `R${s.x}|${s.y}|${s.w}|${s.h}|${s.color ?? ""}`
       case "circle":
-        return `C${s.cx}|${s.cy}|${s.r}`
+        return `C${s.cx}|${s.cy}|${s.r}|${s.color ?? ""}`
       case "point":
-        return `P${s.x}|${s.y}`
+        return `P${s.x}|${s.y}|${s.color ?? ""}`
+      case "text":
+        return `T${s.x}|${s.y}|${s.text}|${s.color ?? ""}`
     }
   })
-  return `${name}::${parts.join(",")}`
+  const vp = plot.viewport
+    ? `V${plot.viewport.minX}|${plot.viewport.minY}|${plot.viewport.w}|${plot.viewport.h}`
+    : ""
+  return `${name}::${vp}::${plot.aspect}::${parts.join(",")}`
 }
 
 function buildDecorations(state: {
