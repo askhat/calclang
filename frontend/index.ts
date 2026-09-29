@@ -593,6 +593,20 @@ document.getElementById("share-btn")?.addEventListener("click", async () => {
   }
 })
 
+// On narrow (phone) layouts the sidebar is an off-canvas drawer.
+const sidebarBtn = document.getElementById("sidebar-btn")
+function setSidebarOpen(open: boolean): void {
+  document.body.classList.toggle("sidebar-open", open)
+  sidebarBtn?.setAttribute("aria-expanded", String(open))
+}
+sidebarBtn?.addEventListener("click", () => {
+  setSidebarOpen(!document.body.classList.contains("sidebar-open"))
+})
+document.getElementById("sidebar-scrim")?.addEventListener("click", () => setSidebarOpen(false))
+document.getElementById("files-list")?.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).closest(".file-name")) setSidebarOpen(false)
+})
+
 document.getElementById("help-btn")?.addEventListener("click", () => {
   const dialog = document.getElementById("help-dialog") as HTMLDialogElement | null
   dialog?.showModal()

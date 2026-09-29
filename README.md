@@ -29,6 +29,26 @@ bun run src/index.ts --ast file.calc        # AST dump
 bun test                                    # 460+ tests
 ```
 
+### Desktop and mobile apps (Tauri 2)
+
+The web editor (`bun run dev`) is packaged with Tauri. `bun run build:web`
+bundles `frontend/` into `dist/`, which the native shells load.
+
+```sh
+bunx tauri build                 # macOS: Calc.app + .dmg
+
+bunx tauri android init          # once; needs Android Studio, SDK + NDK
+bun run android:dev              # emulator or USB device, hot reload
+bun run android:build            # .apk / .aab
+
+bunx tauri ios init              # once; macOS + Xcode only
+bun run ios:dev
+bun run ios:build                # .ipa (needs an Apple developer team)
+```
+
+`init` generates the native projects under `src-tauri/gen/`. Below 720px the
+sidebar turns into a drawer behind the ☰ button.
+
 In the REPL, `:help` lists commands; `:units` and `:vars` dump the current
 environment; `:exit` (or Ctrl+D) quits.
 

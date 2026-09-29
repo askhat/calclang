@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Calc</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -13,6 +13,9 @@
         <span class="brand-name">Calc</span>
       </div>
       <div class="header-actions">
+        <button id="sidebar-btn" class="sidebar-toggle" title="Show files and variables" aria-controls="sidebar" aria-expanded="false">
+          ☰
+        </button>
         <button id="snapshot-btn" title="Capture a snapshot to compare results against later edits">
           Snapshot
         </button>
@@ -24,7 +27,8 @@
     </header>
     <main>
       <div id="editor"></div>
-      <aside>
+      <div id="sidebar-scrim" class="sidebar-scrim"></div>
+      <aside id="sidebar">
         <section class="panel">
           <div class="panel-head">
             <h2>Files</h2>

@@ -9,11 +9,18 @@
   },
   "scripts": {
     "calc": "bun run src/index.ts",
-    "dev": "bun run --hot src/server.ts",
+    "dev": "node api.js && bun run --hot src/server.ts",
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "build:web": "rm -rf dist && bun build ./frontend/index.html --outdir dist --minify",
+    "tauri": "tauri",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build",
+    "ios:dev": "tauri ios dev",
+    "ios:build": "tauri ios build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "@types/bun": "latest",
     "typescript": "^5.6.0"
   },
